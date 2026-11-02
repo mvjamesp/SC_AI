@@ -7,7 +7,7 @@ import time
 from dataclasses import replace
 from compression import zstd
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from . import (errors, ingress, local_services, model_prompt_page,
+from . import (client_close, errors, ingress, local_services, model_prompt_page,
                media_origin, provider_defs, relay, setup, subscription_recovery,
                subscription_fallback, transport, turn_budget, request_evidence, request_lease)
 from .credentials import Credentials
@@ -54,6 +54,14 @@ class Router(ThreadingHTTPServer):
     def server_bind(self):
         _harden_listener(self.socket)
         super().server_bind()
+
+    def shutdown_request(self, request):
+        if os.name != 'nt':
+            return super().shutdown_request(request)
+        try:
+            client_close.half_close_and_drain(request)
+        finally:
+            self.close_request(request)
 
     def __init__(self, state, fileno=None, credentials=None):
         sock = (None if fileno is None else
@@ -262,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.error(errors.retryable_preparation(str(exc)))
             return self.error(errors.preparation(str(exc)))
         except LookupError as exc:
-            if isinstance(exc, KeyError):
+            if isinstance(exc, (KeyError, IndexError)):
                 # Malformed payload/tool-fragment indexing, not keylessness:
                 # keep the original payload-error mapping and open no window.
                 return self.error(errors.map_client_error(exc))
@@ -271,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
             setup.open_key_window(self.server, self.server.credentials.home, pid)
             return self.error(errors.credential_problem(
                 detail='%s: %s' % (provider_defs.label_for(pid), exc)))
-        except (ValueError, KeyError, OSError, zstd.ZstdError,
+        except (ValueError, OSError, zstd.ZstdError,
                 AttributeError, TypeError, RecursionError) as exc:
             err = errors.map_client_error(exc)
             if err.code == 'INTERNAL_ERROR':

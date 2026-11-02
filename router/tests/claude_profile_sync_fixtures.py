@@ -3,6 +3,7 @@ import base64
 import hashlib
 import importlib.util
 import json
+import os
 import stat
 import tempfile
 import unittest
@@ -12,10 +13,20 @@ from unittest import mock
 
 def fingerprint(root):
     values = []
+    lock_roots = {Path(root), Path(root) / 'Claude', Path(root) / 'Claude-3p'}
     for path in sorted(Path(root).rglob('*')):
         if path.is_symlink():
             values.append((path.relative_to(root).as_posix(), 'symlink'))
         elif path.is_file():
+            if (os.name == 'nt' and path.name == '.claude-profile-sync.lock'
+                    and path.parent in lock_roots):
+                # Windows denies reads of the held byte-range lock. Keep its
+                # presence and metadata in snapshots; all user files still hash.
+                info = path.stat()
+                values.append((path.relative_to(root).as_posix(), 'coordination-lock',
+                               info.st_size, info.st_mtime_ns, info.st_ino,
+                               stat.S_IMODE(info.st_mode)))
+                continue
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             values.append((path.relative_to(root).as_posix(), digest,
                            stat.S_IMODE(path.stat().st_mode)))
@@ -136,6 +147,11 @@ class PairFixture(unittest.TestCase):
 def record(profile_path, store, account, organization, session_id, *,
            filename=None, title='task', cli=None, cwd=None, bundle_files=None,
            transcript=None, local_secret=None, mode=None):
+    def setup_path(value):
+        # Fixture creation uses the raw Windows API spelling, independently of product code.
+        value = Path(value).absolute()
+        return Path('\\\\?\\' + str(value)) if os.name == 'nt' else value
+
     path = namespace(profile_path, store, account, organization) / (
         filename or ('local_' + session_id + '.json'))
     doc = {'sessionId': session_id, 'title': title, 'sourceProfile': 'fixture'}
@@ -145,22 +161,22 @@ def record(profile_path, store, account, organization, session_id, *,
         doc['cwd'] = str(cwd)
     if local_secret:
         doc['targetLocalSecret'] = local_secret
-    path.write_text(json.dumps(doc))
+    setup_path(path).write_text(json.dumps(doc), encoding='utf-8')
     if mode is not None:
-        path.chmod(mode)
+        setup_path(path).chmod(mode)
     bundle = path.with_suffix('')
     if bundle_files is not None or transcript is not None:
-        bundle.mkdir(parents=True, exist_ok=True)
+        setup_path(bundle).mkdir(parents=True, exist_ok=True)
         for relative, content in (bundle_files or {}).items():
             artifact = bundle / relative
-            artifact.parent.mkdir(parents=True, exist_ok=True)
-            artifact.write_text(content)
+            setup_path(artifact.parent).mkdir(parents=True, exist_ok=True)
+            setup_path(artifact).write_text(content, encoding='utf-8')
         if transcript is not None:
             artifact = (bundle / '.claude' / 'projects' / 'session' /
                         ((cli or 'fallback') + '.jsonl'))
-            artifact.parent.mkdir(parents=True, exist_ok=True)
-            artifact.write_text(json.dumps({
-                'message': {'content': transcript}}) + '\n')
+            setup_path(artifact.parent).mkdir(parents=True, exist_ok=True)
+            setup_path(artifact).write_text(json.dumps({
+                'message': {'content': transcript}}) + '\n', encoding='utf-8')
     return path
 
 

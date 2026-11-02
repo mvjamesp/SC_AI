@@ -23,12 +23,12 @@ def _load(name, filename):
 
 _records = _load('router_publish_records', 'claude_profile_records.py')
 _winacl = _load('router_publish_acl', '../ai_router/winacl.py')
+io_path = _records._rules.io_path
 MANIFEST_NAME = re.compile(r'^\.claude-profile-transaction-([0-9a-f]{32})\.json$')
 PAIR_PHASES = ('prepared', 'displaced', 'bundle-published',
                'record-published', 'committed', 'restoring')
 class UnsafeManifest(ValueError):
     """A malformed or unowned journal; never expose its contents."""
-
 
 def _fsync_dir(path):
     if os.name == 'nt':
@@ -42,23 +42,23 @@ def _fsync_dir(path):
 
 def private(path):
     if os.name == 'nt':
-        _winacl.require_owner_only(path, windows=True)
+        _winacl.require_owner_only(io_path(path), windows=True)
     else:
-        path.chmod(0o700 if path.is_dir() else 0o600)
+        io_path(path).chmod(0o700 if io_path(path).is_dir() else 0o600)
 
 
 def flush(path, protect=False):
-    paths = [path] + (list(path.rglob('*')) if path.is_dir() else [])
+    paths = [path] + ([path / child.relative_to(io_path(path)) for child in io_path(path).rglob('*')] if io_path(path).is_dir() else [])
     for item in paths:
         _records.assert_ancestors(item)
         # POSIX descendants can be hard links to originals outside the profile.
         if protect and (os.name == 'nt' or item == path):
             private(item)
-        if item.is_file():
-            with item.open('r+b' if os.name == 'nt' else 'rb') as stream:
+        if io_path(item).is_file():
+            with io_path(item).open('r+b' if os.name == 'nt' else 'rb') as stream:
                 os.fsync(stream.fileno())
     for item in reversed(paths):
-        if item.is_dir():
+        if io_path(item).is_dir():
             _fsync_dir(item)
 
 
@@ -83,27 +83,27 @@ def _relative(root, path):
 def file_state(path):
     _records.assert_ancestors(path)
     try:
-        info = path.lstat()
+        info = io_path(path).lstat()
     except FileNotFoundError:
         return None
     if not stat.S_ISREG(info.st_mode):
         raise ValueError('unsafe-artifact')
     return {'kind': 'file', 'mode': info.st_mode & 0o777,
-            'size': info.st_size, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+            'size': info.st_size, 'sha256': hashlib.sha256(io_path(path).read_bytes()).hexdigest()}
 
 
 def tree_state(path):
     _records.assert_ancestors(path)
-    if not path.exists():
+    if not io_path(path).exists():
         return None
-    if not path.is_dir():
+    if not io_path(path).is_dir():
         raise ValueError('unsafe-artifact')
-    values = [['dir', '.', path.stat().st_mode & 0o777]]
-    for item in sorted(path.rglob('*')):
+    values = [['dir', '.', io_path(path).stat().st_mode & 0o777]]
+    for item in sorted(path / child.relative_to(io_path(path)) for child in io_path(path).rglob('*')):
         _records.assert_ancestors(item)
         relative = item.relative_to(path).as_posix()
-        if item.is_dir():
-            values.append(['dir', relative, item.stat().st_mode & 0o777])
+        if io_path(item).is_dir():
+            values.append(['dir', relative, io_path(item).stat().st_mode & 0o777])
         else:
             state = file_state(item)
             values.append(['file', relative, state['mode'], state['size'], state['sha256']])
@@ -126,10 +126,10 @@ def private_state(value):
 
 def restore_modes(path, expected):
     if isinstance(expected, dict):
-        path.chmod(expected['mode'])
+        io_path(path).chmod(expected['mode'])
     elif expected is not None:
         for row in expected:
-            (path / row[1]).chmod(row[2])
+            io_path(path / row[1]).chmod(row[2])
 
 
 def saved_matches(value, expected):
@@ -147,7 +147,7 @@ def move_new(source, target):
     _records.assert_ancestors(source)
     _records.assert_ancestors(target)
     if os.name == 'nt':
-        os.rename(source, target)
+        os.rename(io_path(source), io_path(target))
     else:
         libc = ctypes.CDLL(None, use_errno=True)
         if sys.platform == 'darwin':
@@ -164,8 +164,8 @@ def move_new(source, target):
 
 def _write_payload(root, name, payload):
     path = _safe_path(root, name)
-    fd, tmp = tempfile.mkstemp(dir=str(root), prefix=name + '.', suffix='.tmp')
-    tmp = Path(tmp)
+    fd, tmp = tempfile.mkstemp(dir=str(io_path(root)), prefix=name + '.', suffix='.tmp')
+    tmp = _records._rules.ordinary_path(tmp)
     try:
         private(tmp)
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
@@ -173,12 +173,12 @@ def _write_payload(root, name, payload):
             stream.write(json.dumps(payload, sort_keys=True))
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(tmp, path)
+        os.replace(io_path(tmp), io_path(path))
         _fsync_dir(root)
     finally:
         if fd is not None:
             os.close(fd)
-        tmp.unlink(missing_ok=True)
+        io_path(tmp).unlink(missing_ok=True)
     return path
 
 
@@ -287,14 +287,14 @@ def write_pair_manifest(store_root, record_target, bundle_target, record_text,
                 for p in [record] + [Path(item['record']) for item in duplicates]}
     for control in controls:
         _records.assert_ancestors(control)
-        control.mkdir(mode=0o700)
+        io_path(control).mkdir(mode=0o700)
         private(control)
     record_stage = record.parent / ('.claude-profile-control-' + token) / (
         '.' + record.name + '.after-' + token)
     record_doc = json.loads(record_text)
     identifier = _records.session_id(record_doc)
     _write_payload(record_stage.parent, record_stage.name, record_doc)
-    record_stage.chmod(current['record']['mode'] & 0o600 if current['record'] else 0o600)
+    io_path(record_stage).chmod(current['record']['mode'] & 0o600 if current['record'] else 0o600)
     flush(record_stage)
     flush(stage)
     doc = dict(version=2, phase='prepared', session_id=identifier, record=_relative(root, record),
@@ -304,7 +304,7 @@ def write_pair_manifest(store_root, record_target, bundle_target, record_text,
                duplicates=[])
     for row, target in [(doc, record)] + [(item, Path(item['record'])) for item in duplicates]:
         target_bundle = bundle if row is doc else Path(row.get('bundle', target.with_suffix('')))
-        if target.exists() and _records.session_id(_records.read_json(target)) != identifier:
+        if io_path(target).exists() and _records.session_id(_records.read_json(target)) != identifier:
             raise ValueError('record-id-conflict')
         if row is not doc:
             row = dict(record=_relative(root, target), bundle=_relative(root, target_bundle),
@@ -319,7 +319,7 @@ def write_pair_manifest(store_root, record_target, bundle_target, record_text,
 
 
 def update_pair_manifest(path, phase):
-    doc = json.loads(path.read_text(encoding='utf-8'))
+    doc = json.loads(io_path(path).read_text(encoding='utf-8'))
     validate(path.parent, path, doc)
     if phase not in PAIR_PHASES:
         raise UnsafeManifest('invalid-journal')
@@ -336,21 +336,21 @@ def within(value, expected):
 def delete_checked(path, expected, kind):
     if not within(state(path, kind), expected):
         raise ValueError('transaction backup changed')
-    shutil.rmtree(path) if kind == 'tree' else path.unlink()
+    shutil.rmtree(io_path(path)) if kind == 'tree' else io_path(path).unlink()
 
 
 def publish_pair(manifest, record_text):
     root = manifest.parent
-    doc = json.loads(manifest.read_text(encoding='utf-8'))
+    doc = json.loads(io_path(manifest).read_text(encoding='utf-8'))
     paths = validate(root, manifest, doc)
-    if doc['phase'] != 'prepared' or json.loads(record_text) != json.loads(paths['record_stage'].read_text(encoding='utf-8')):
+    if doc['phase'] != 'prepared' or json.loads(record_text) != json.loads(io_path(paths['record_stage']).read_text(encoding='utf-8')):
         raise UnsafeManifest('invalid-journal')
     for key, kind in (('record_stage', 'file'), ('stage', 'tree')):
         expected = doc['after']['record' if kind == 'file' else 'bundle']
         if state(paths[key], kind) != expected:
             raise ValueError('transaction stage changed')
     for target, backup, expected, kind in artifacts(root, doc):
-        if state(target, kind) != expected or backup.exists():
+        if state(target, kind) != expected or io_path(backup).exists():
             raise ValueError('transaction target changed')
         if expected is not None:
             if os.name == 'nt':
@@ -358,7 +358,7 @@ def publish_pair(manifest, record_text):
             move_new(target, backup)
             displaced = state(backup, kind)
             flush(backup, protect=True)
-            if displaced != expected or target.exists():
+            if displaced != expected or io_path(target).exists():
                 raise ValueError('transaction displaced generation changed')
     update_pair_manifest(manifest, 'displaced')
     move_new(paths['stage'], paths['bundle'])
@@ -377,12 +377,12 @@ def verify_committed(root, doc, paths):
         if state(paths[key], kind) != doc['after'][key]:
             raise ValueError('transaction target changed')
     for target, backup, expected, kind in artifacts(root, doc):
-        if target not in (paths['record'], paths['bundle']) and target.exists():
+        if target not in (paths['record'], paths['bundle']) and io_path(target).exists():
             raise ValueError('transaction duplicate recreated')
-        if expected is not None and not backup.exists() and doc['phase'] != 'committed':
+        if expected is not None and not io_path(backup).exists() and doc['phase'] != 'committed':
             raise ValueError('transaction backup missing')
         same = within if doc['phase'] == 'committed' else operator.eq  # Resumable cleanup.
-        if backup.exists() and not same(state(backup, kind), private_state(expected)):
+        if io_path(backup).exists() and not same(state(backup, kind), private_state(expected)):
             raise ValueError('transaction backup changed')
 
 
@@ -390,11 +390,11 @@ def finish(root, manifest, doc, paths):
     doc = dict(doc, phase='committed')
     verify_committed(root, doc, paths)
     for _target, backup, expected, kind in artifacts(root, doc):
-        if backup.exists():
+        if io_path(backup).exists():
             verify_committed(root, doc, paths)
             delete_checked(backup, private_state(expected), kind)
     for parent in {backup.parent for _, backup, _, _ in artifacts(root, doc)}:
-        if parent.exists():
-            parent.rmdir()
-    manifest.unlink()
+        if io_path(parent).exists():
+            io_path(parent).rmdir()
+    io_path(manifest).unlink()
     _fsync_dir(root)

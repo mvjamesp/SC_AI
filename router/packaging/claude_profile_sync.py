@@ -25,6 +25,8 @@ _ledger = _load('router_sync_ledger', 'claude_profile_ledger.py')
 STORES = _records.STORES
 PROFILE_NAMES = _records.PROFILE_NAMES
 profile_roots = _records.profile_roots
+io_path = _rules.io_path
+ordinary_path = _rules.ordinary_path
 _stage_union = _bundle.stage_union
 
 
@@ -45,7 +47,8 @@ def _transcript(record, bundle, env):
     # is only a snapshot and otherwise hides every turn since the first copy.
     for root in (projects, bundle):
         _records.assert_ancestors(root)
-        for path in sorted(root.rglob('*.jsonl')) if root.is_dir() else []:
+        for path in sorted(root / child.relative_to(io_path(root))
+                           for child in io_path(root).rglob('*.jsonl')) if io_path(root).is_dir() else []:
             if path.name != cli + '.jsonl':
                 continue
             present = True
@@ -53,7 +56,7 @@ def _transcript(record, bundle, env):
                     or not _records.safe_target(path, root) or not _rules.regular(path)):
                 continue
             try:
-                lines = [json.loads(line) for line in path.read_text(encoding='utf-8').split('\n') if line.strip()]
+                lines = [json.loads(line) for line in io_path(path).read_text(encoding='utf-8').split('\n') if line.strip()]
                 if not lines or not all(isinstance(line, dict) for line in lines):
                     continue
                 return path
@@ -86,7 +89,8 @@ def _repair_shared_history(record, env):
     root = Path(env.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))) / 'projects'
     _records.assert_ancestors(root)
     candidates = set()
-    for path in root.rglob('*') if root.is_dir() else []:
+    for child in io_path(root).rglob('*') if io_path(root).is_dir() else []:
+        path = root / child.relative_to(io_path(root))
         if (path.name == cli + '.jsonl' or
                 path.name.startswith('.' + cli + '.jsonl.history-repair-')
                 and path.name.endswith('.journal')):
@@ -112,7 +116,7 @@ def _sync_session(source_paths, source_root, target_root, target_store,
     container = Path(*layout.relative_to(layout_store).parts[2:-1])
     target = namespace[1] / container / (existing.name if existing else source_record.name)
     _records.assert_target(target, target_store)
-    if target.exists() and target not in target_paths:
+    if io_path(target).exists() and target not in target_paths:
         raise ValueError('record-id-conflict')
     target_bundle = _records.bundle_path(target, target_store)
     if protected is not None:
@@ -131,7 +135,7 @@ def _sync_session(source_paths, source_root, target_root, target_store,
     inputs = [{'bundle': bundles[p], 'paths': (
         bundles[p], target_bundle,
         source_root if p in source_paths else target_root, target_root)}
-        for p in ordered if p != target and bundles[p].exists()]
+        for p in ordered if p != target and io_path(bundles[p]).exists()]
     paths = (bundles[source_record], target_bundle, source_root, target_root)
     existing_paths = ((bundles[existing], target_bundle, target_root, target_root)
                       if existing else None)
@@ -149,7 +153,7 @@ def _sync_session(source_paths, source_root, target_root, target_store,
     before = {'record': _transaction.file_state(target),
               'bundle': _transaction.tree_state(target_bundle)}
     _rules.assert_clean_record(json.loads(text))
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    io_path(target.parent).mkdir(parents=True, exist_ok=True, mode=0o700)
     stage = _stage_union(target_bundle, target_wins, inputs, transcript,
                          source_root, target_root, transcript_paths=(
                              winner_bundle, target_bundle,
@@ -159,11 +163,11 @@ def _sync_session(source_paths, source_root, target_root, target_store,
         _records.assert_record_snapshot(snapshot)
         if any(_transaction.tree_state(p) != old for p, old in bundle_snapshot.items()):
             raise ValueError('source changed during sync')
-        unchanged = (target.exists() and json.loads(text) == _records.read_json(target)
+        unchanged = (io_path(target).exists() and json.loads(text) == _records.read_json(target)
                      and before['bundle'] is not None
                      and _transaction.tree_state(stage)[1:] == before['bundle'][1:])
         if unchanged and not duplicates:
-            shutil.rmtree(stage)
+            shutil.rmtree(io_path(stage))
             return 'unchanged'
         manifest = _transaction.write_pair_manifest(
             target_store, target, target_bundle, text, stage,
@@ -174,8 +178,8 @@ def _sync_session(source_paths, source_root, target_root, target_store,
     except Exception:
         if manifest is not None:
             _transaction.recover_store(target_store, errors=[], account=namespace[0])
-        elif stage.exists():
-            shutil.rmtree(stage)
+        elif io_path(stage).exists():
+            shutil.rmtree(io_path(stage))
         raise
 
 
@@ -229,7 +233,7 @@ def _sync_direction(source_root, target_root, env, target_wins=False,
         if (store, None) in blocked:
             continue
         _records.assert_target(namespace[1], target_root)
-        namespace[1].mkdir(parents=True, exist_ok=True)
+        io_path(namespace[1]).mkdir(parents=True, exist_ok=True)
         for identifier in sorted(set(source_groups) | set(target_groups)):
             key = (store, identifier)
             if key in blocked or identifier in elsewhere:
@@ -307,11 +311,13 @@ def sync_profiles(home, winner, env=None):
             _records.assert_ancestors(root)
     except (OSError, ValueError):
         return _report(1, ['unsafe-profile'])
-    if first.resolve() == third.resolve():
+    first_resolved = ordinary_path(io_path(first).resolve())
+    third_resolved = ordinary_path(io_path(third).resolve())
+    if first_resolved == third_resolved:
         return _report(1, ['identical-profiles'])
-    if first.resolve() in third.resolve().parents or third.resolve() in first.resolve().parents:
+    if first_resolved in third_resolved.parents or third_resolved in first_resolved.parents:
         return _report(1, ['overlapping-profiles'])
-    if not first.is_dir() or not third.is_dir():
+    if not io_path(first).is_dir() or not io_path(third).is_dir():
         return _report(pending=1, errors=['profile-missing'])
     roots = {'1p': first, '3p': third}
     with contextlib.ExitStack() as locks:

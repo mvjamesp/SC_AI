@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from tests._platform import unix_only
@@ -43,6 +44,7 @@ class ShowPendingTests(unittest.TestCase):
         return home / 'update-notice.json'
 
     def _with_dialog(self, test):
+        test.enterContext(mock.patch.object(notice_mod, 'sys', SimpleNamespace(platform='linux')))
         real = notice_mod.dialog_command
         test.addCleanup(setattr, notice_mod, 'dialog_command', real)
         test.addCleanup(setattr, install_mod._svc.notice,

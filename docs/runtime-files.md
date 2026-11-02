@@ -54,6 +54,7 @@ are never copied between machines.
 `ai_router/usage_episodes.py`,
 `ai_router/subscription_history.py`, `ai_router/context_recovery.py`,
 `ai_router/provider_defs.py`, `ai_router/upstream.py`, `ai_router/ingress.py`,
+`ai_router/client_close.py`,
 `ai_router/relay.py`, `ai_router/tool_merge.py`, `ai_router/atomic_write.py`,
 `ai_router/stream_relay.py`, `ai_router/stream_events.py`,
 `ai_router/stream_attempt.py`, `ai_router/strip_retry.py`,
@@ -94,7 +95,9 @@ shortcut. Temporary stages,
 before images and transaction manifests stay inside the local session store
 and are never release members. Private control directories protect backups;
 POSIX attachment permissions stay unchanged so hard-linked originals elsewhere
-are unaffected. Windows checks owner-only access. Recovery metadata includes store-relative paths, session IDs
+are unaffected. Windows checks owner-only access and uses extended absolute
+paths for filesystem operations in long session folders. Record metadata keeps
+ordinary paths. Recovery metadata includes store-relative paths, session IDs
 and file digests, so it stays private. It contains no session text, credentials
 or exception detail.
 

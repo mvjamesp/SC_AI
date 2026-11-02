@@ -19,6 +19,8 @@ def _load_publish():
 
 
 _publish = _load_publish()
+io_path = _publish.io_path
+ordinary_path = _publish._records._rules.ordinary_path
 # _write_journal's temporary names: '<key>.journal.<random>.tmp', or '.done.'.
 ABANDONED_TEMP = re.compile(r'[0-9a-f]{64}\.(?:journal|done)\.\w+\.tmp')
 
@@ -67,13 +69,13 @@ def _snapshot(path):
     path = Path(path)
     _publish._records.assert_ancestors(path)
     try:
-        listed = path.lstat()
+        listed = io_path(path).lstat()
     except FileNotFoundError:
         return None, None, None
     if not stat.S_ISREG(listed.st_mode) or listed.st_nlink != 1:
         raise ValueError('unsafe history file')
     flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
-    fd = os.open(str(path), flags)
+    fd = os.open(str(io_path(path)), flags)
     try:
         opened = os.fstat(fd)
         if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
@@ -88,7 +90,7 @@ def _snapshot(path):
         finished = os.fstat(fd)
     finally:
         os.close(fd)
-    current = path.lstat()
+    current = io_path(path).lstat()
     if (not stat.S_ISREG(current.st_mode) or current.st_nlink != 1
             or not _same_identity(finished, _identity(opened))
             or not _same_identity(current, _identity(finished))):
@@ -100,7 +102,7 @@ def _snapshot(path):
 
 def _present(path):
     try:
-        Path(path).lstat()
+        io_path(path).lstat()
         return True
     except FileNotFoundError:
         return False
@@ -112,7 +114,7 @@ def _private_match(actual, expected):
 
 def _write_new(path, data):
     path = Path(path)
-    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    fd = os.open(str(io_path(path)), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(fd, 'wb') as stream:
             fd = None
@@ -128,8 +130,8 @@ def _write_new(path, data):
 
 def _write_journal(path, document):
     fd, temporary = tempfile.mkstemp(prefix=path.name + '.', suffix='.tmp',
-                                     dir=str(path.parent))
-    temporary = Path(temporary)
+                                     dir=str(io_path(path.parent)))
+    temporary = ordinary_path(temporary)
     try:
         _publish.private(temporary)
         with os.fdopen(fd, 'w', encoding='utf-8') as stream:
@@ -143,7 +145,7 @@ def _write_journal(path, document):
         if fd is not None:
             os.close(fd)
         try:
-            temporary.unlink()
+            io_path(temporary).unlink()
         except FileNotFoundError:
             pass
 
@@ -227,7 +229,7 @@ def _resume(target, journal, backup, stage, done):
             if not _present(target):
                 _publish.move_new(backup, target)
                 for item in (stage, journal):
-                    item.unlink(missing_ok=True)
+                    io_path(item).unlink(missing_ok=True)
             raise ValueError('changed history backup')
         target_state = None
     if target_state is not None:
@@ -272,12 +274,12 @@ def _discard_abandoned(target, stem):
     """A process killed while writing a journal leaves its temporary file, and
     maybe the staged copy, with no journal to own them. The transcript is only
     moved once a journal exists, so dropping them lets the next run re-plan."""
-    for item in list(target.parent.iterdir()):
+    for item in list((target.parent / child.name for child in io_path(target.parent).iterdir())):
         rest = item.name[len(stem):] if item.name.startswith(stem) else ''
         orphan_stage = (len(rest) == 70 and rest.endswith('.stage')
                         and not _present(target.with_name(stem + rest[:64] + '.journal')))
         if ABANDONED_TEMP.fullmatch(rest) or orphan_stage:
-            item.unlink()
+            io_path(item).unlink()
 
 
 def _recover_transactions(target):
@@ -285,7 +287,7 @@ def _recover_transactions(target):
     _discard_abandoned(target, stem)
     journals, artifacts = [], []
     known = set()
-    for item in target.parent.iterdir():
+    for item in (target.parent / child.name for child in io_path(target.parent).iterdir()):
         if item.name.startswith(stem):
             artifacts.append(item.name)
             suffix = next((value for value in ('.journal', '.original', '.stage', '.done')
@@ -298,7 +300,7 @@ def _recover_transactions(target):
             if suffix == '.journal':
                 journals.append((key, paths))
     if any(item.name.startswith(stem) and item.name not in known
-           for item in target.parent.iterdir()):
+           for item in (target.parent / child.name for child in io_path(target.parent).iterdir())):
         raise ValueError('unowned history artifact')
     journal_names = {paths[0].name for _, paths in journals}
     if any(name not in journal_names and name not in {

@@ -17,6 +17,13 @@ def issued():
 
 
 class ProvisionTests(unittest.TestCase):
+    def test_cancelled_signin_never_calls_provisioning_endpoint(self):
+        post, authorize = mock.Mock(), mock.Mock()
+        checks = iter((False, True))
+        self.assertIs(work_account.provision(authorize=authorize, post=post,
+            cancelled=lambda: next(checks)), work_account.CANCELLED)
+        post.assert_not_called()
+
     def test_signed_in_person_is_only_issuance_input(self):
         post = mock.Mock(return_value=issued())
         authorize = mock.Mock(return_value={'access_token': 'synthetic-access',
@@ -76,6 +83,10 @@ class ProvisionTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.object(work_account, '_waiting',
+            side_effect=lambda issue=None: (issue or work_account.provision)()))
+
     def collect(self, platform, responses, issue=None, clients='both'):
         calls = []
         def run(argv, **kwargs):

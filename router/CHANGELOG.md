@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 1.3.36
+
+- Report malformed request fields as request failures without asking users to
+  replace a working key or opening key setup. Keep genuine credential recovery.
+- Verify that saved keys remain usable across updates, client mode changes and
+  source layout changes, including the move into `SC_AI/router`.
+
+## 1.3.35
+
+- Share Claude tasks, repair canonical CLI history and recover interrupted
+  copies in long Windows folders using the existing ownership and recovery checks.
+- Preserve Windows refusal responses when a client is still sending its request
+  body, with a bounded grace before closing the connection.
+- Keep work sign-in visible and cancellable while the work key is prepared.
+  Honor cancellation while the waiting window closes. Avoid a separate restart
+  notice during graphical setup.
+- Verify Windows Codex restarts through the existing desktop lifecycle. If a
+  restart fails, keep it pending and show manual steps without repeated prompts.
+  An unavailable or timed-out restart window leaves completed setup successful
+  without stacking another completion prompt.
+
 ## 1.3.34
 
 - Bundle Factory 0.3.0 with its offline project progress page and retain the

@@ -1,12 +1,62 @@
 """Capture continued native history instead of reusing an imported snapshot."""
 import json
+import os
+import unittest
 from pathlib import Path
 
 from tests import claude_profile_sync_fixtures as fixtures
 from tests.claude_profile_sync_fixtures import SyncFixture, sync
+from tests.test_claude_profile_history import cleanup_history_root, long_history, raw_path
 
 
 class TranscriptCaptureTests(SyncFixture):
+    def setUp(self):
+        super().setUp()
+        cleanup_history_root(self, self.root)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows long canonical history')
+    def test_long_canonical_history_repairs_in_both_public_directions(self):
+        for active in ('1p', '3p'):
+            with self.subTest(active=active):
+                self.setUp()
+                source = self.first if active == '1p' else self.third
+                live = long_history(self)
+                self.env['CLAUDE_CONFIG_DIR'] = str(live.parents[2])
+                identity = json.loads((source / 'config.json').read_bytes())
+                fixtures.write_sentinels(source)
+                sentinel = fixtures.fingerprint(source / 'creds')
+                fixtures.record(source, 'claude-code-sessions',
+                    identity['lastKnownAccountUuid'], identity['lastKnownOrganizationUuid'],
+                    'canonical', cli=live.stem, transcript='stale bundled response')
+                rows = [
+                    {'type': 'user', 'message': {'content': 'Caf\u00e9 \u65e5\u672c\u0085\u2028\u2029'}},
+                    {'type': 'assistant', 'requestId': 'foreign-request',
+                     'message': {'id': 'foreign-message', 'content': 'keep this response'}},
+                ]
+                raw_path(live).write_bytes(''.join(json.dumps(row, ensure_ascii=False) + '\n'
+                                                 for row in rows).encode('utf-8'))
+                report = self.sync(active)
+                self.assertEqual((report['failed'], report['pending']), (0, 0), report)
+                repaired = [json.loads(line) for line in raw_path(live).read_text(
+                    encoding='utf-8').split('\n') if line]
+                self.assertEqual(repaired[0], rows[0])
+                self.assertEqual(repaired[1]['message'], rows[1]['message'])
+                self.assertEqual(repaired[1]['providerRequestId'], 'foreign-request')
+                self.assertNotIn('requestId', repaired[1])
+                for profile in (self.first, self.third):
+                    record = self.paths(profile, 'claude-code-sessions', 'canonical')[0]
+                    saved = record.with_suffix('') / '.claude/projects/session' / live.name
+                    self.assertEqual([json.loads(line) for line in raw_path(saved).read_text(
+                        encoding='utf-8').split('\n') if line], repaired)
+                before = {item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+                          for item in raw_path(live.parent).iterdir()}
+                report = self.sync(active)
+                self.assertEqual((report['failed'], report['copied'], report['replaced']),
+                                 (0, 0, 0), report)
+                self.assertEqual({item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+                                  for item in raw_path(live.parent).iterdir()}, before)
+                self.assertEqual(fixtures.fingerprint(source / 'creds'), sentinel)
+
     def test_complete_conversations_copy_in_both_directions_without_login_files(self):
         for active, source in (('1p', self.first), ('3p', self.third)):
             identity = json.loads((source / 'config.json').read_text())
@@ -34,7 +84,8 @@ class TranscriptCaptureTests(SyncFixture):
                 rows = [{'type': 'user', 'message': {'content': text}},
                         {'type': 'assistant', 'message': message,
                          'toolUseResult': {'password': 'synthetic-value', 'output': text}}]
-                live.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows))
+                live.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows),
+                                encoding='utf-8')
                 before = live.read_bytes()
                 report = self.sync(active)
                 self.assertEqual((report['failed'], report['pending']), (0, 0), report)
@@ -44,11 +95,11 @@ class TranscriptCaptureTests(SyncFixture):
                     self.assertEqual((saved['title'], saved['initialMessage'], saved['messages']),
                                      (text, text, [message]))
                     history = copied.with_suffix('') / '.claude/projects/session' / live.name
-                    self.assertEqual([json.loads(row) for row in history.read_text().split('\n') if row], rows)
+                    self.assertEqual([json.loads(row) for row in raw_path(history).read_text(encoding='utf-8').split('\n') if row], rows)
                     for name in ('host-creds-example.json', 'ccd-session-secrets.json',
                                  '.audit-key', 'settings.json'):
                         artifact = copied.with_suffix('') / name
-                        self.assertEqual(artifact.exists(), target == source)
+                        self.assertEqual(raw_path(artifact).exists(), target == source)
                 self.assertEqual(live.read_bytes(), before)
 
     def test_foreign_diagnostics_are_repaired_in_shared_history_and_both_bundles(self):
@@ -65,7 +116,7 @@ class TranscriptCaptureTests(SyncFixture):
         self.assertEqual(report['failed'], 0, report)
         for profile in (self.first, self.third):
             path = self.paths(profile, 'claude-code-sessions', 'foreign')[0]
-            saved = json.loads((path.with_suffix('') / '.claude/projects/session' / live.name).read_text())
+            saved = json.loads(raw_path(path.with_suffix('') / '.claude/projects/session' / live.name).read_bytes())
             self.assertEqual(saved['message'], row['message'])
             self.assertEqual(saved['providerRequestId'], row['requestId'])
             self.assertNotIn('requestId', saved)
@@ -101,7 +152,7 @@ class TranscriptCaptureTests(SyncFixture):
                     record = self.paths(profile, 'claude-code-sessions', identifier)[0]
                     bundle = record.with_suffix('')
                     captured = bundle / '.claude/projects/session' / live.name
-                    self.assertEqual([json.loads(row) for row in captured.read_text().splitlines()], history)
+                    self.assertEqual([json.loads(row) for row in raw_path(captured).read_text(encoding='utf-8').splitlines()], history)
                     self.assertEqual(json.loads(record.read_text())['cliSessionId'], cli)
                     for name in ('Claude.txt', 'Claude-3p.txt'):
                         self.assertEqual((bundle / name).read_text(), 'keep')
