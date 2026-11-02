@@ -7,7 +7,7 @@ import time
 from dataclasses import replace
 from compression import zstd
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from . import (errors, ingress, local_services, model_prompt_page,
+from . import (client_close, errors, ingress, local_services, model_prompt_page,
                media_origin, provider_defs, relay, setup, subscription_recovery,
                subscription_fallback, transport, turn_budget, request_evidence, request_lease)
 from .credentials import Credentials
@@ -54,6 +54,14 @@ class Router(ThreadingHTTPServer):
     def server_bind(self):
         _harden_listener(self.socket)
         super().server_bind()
+
+    def shutdown_request(self, request):
+        if os.name != 'nt':
+            return super().shutdown_request(request)
+        try:
+            client_close.half_close_and_drain(request)
+        finally:
+            self.close_request(request)
 
     def __init__(self, state, fileno=None, credentials=None):
         sock = (None if fileno is None else

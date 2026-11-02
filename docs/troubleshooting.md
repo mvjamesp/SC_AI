@@ -120,7 +120,8 @@ filters, for the separate listing check.
 
 ## Windows: use the installed setup tools
 
-On Microsoft Windows 11 x64, run the supplied `bootstrap.ps1` before these steps.
+On Microsoft Windows 11 x64, open the permanent **SCG Router** Start menu shortcut
+and choose **Check setup** first. The commands below are for IT diagnostics after setup.
 Use ordinary PowerShell under the same Windows user who ran setup.
 If your organization blocks scripts, contact IT; keep its execution policy in place.
 You do not need a repository checkout or a separate Python installation.
@@ -131,7 +132,13 @@ installed version, and prints no keys:
 ```powershell
 $RouterRoot = if ($env:ROUTER_HOME) { $env:ROUTER_HOME } else { Join-Path $env:USERPROFILE '.codex\mixed-model-router' }
 $RouterVersion = (Get-Content -Raw -LiteralPath (Join-Path $RouterRoot 'current')).Trim()
-$RouterPython = Join-Path $RouterRoot 'runtime\python\python.exe'
+$RouterResourceName = (Get-Content -Raw -LiteralPath (Join-Path $RouterRoot 'setup-current')).Trim()
+if ($RouterVersion -notmatch '^\d+(?:\.\d+){2,3}$' -or
+    $RouterResourceName -notmatch '^\d+(?:\.\d+){2,3}-[0-9a-f]{16}(?:-repair-[0-9a-f]{12})?$') {
+    throw 'Run SCG Router setup again before continuing.'
+}
+$RouterResources = Join-Path (Join-Path $RouterRoot 'setup') $RouterResourceName
+$RouterPython = Join-Path $RouterResources 'runtime\python\python.exe'
 $RouterInstaller = Join-Path $RouterRoot "releases\$RouterVersion\packaging\install.py"
 if (!(Test-Path -LiteralPath $RouterPython) -or !(Test-Path -LiteralPath $RouterInstaller)) { throw 'Run SCG Router setup again before continuing.' }
 $RouterSavedState = Get-Content -Raw -LiteralPath (Join-Path $RouterRoot 'mixed-router-state.json') | ConvertFrom-Json
@@ -140,9 +147,11 @@ Remove-Variable RouterSavedState
 if (@('subscription', 'none') -notcontains $RouterClaudeRoute) { throw 'SCG Router settings need an IT check before continuing.' }
 ```
 
-The block also preserves Claude's current subscription setting, including older
-installs where it follows the ChatGPT setting. Keep `$RouterClaudeRoute` in the
-Codex commands below so a Codex change does not disable a working Claude connection.
+The `setup-current` pointer selects the retained setup runtime; the block does
+not search for the newest folder. It also preserves Claude's current subscription
+setting, including older installs where it follows the ChatGPT setting.
+Keep `$RouterClaudeRoute` in the Codex commands below so a Codex change does not
+disable a working Claude connection.
 
 For a diagnostic check, run:
 

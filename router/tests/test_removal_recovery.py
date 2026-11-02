@@ -39,7 +39,8 @@ class RemovalRecoveryTests(unittest.TestCase):
         self.args = self.install.build_parser().parse_args(['--home', str(self.home), '--python', sys.executable])
         for patcher in (mock.patch.object(self.install, 'platform_backend', return_value=self.backend),
                 mock.patch.object(self.install, 'find_python', return_value=sys.executable),
-                mock.patch.dict(os.environ, HOME=str(self.root / 'user'))):
+                mock.patch.dict(os.environ, HOME=str(self.root / 'user'),
+                                USERPROFILE=str(self.root / 'user'))):
             patcher.start()
             self.addCleanup(patcher.stop)
         load = self.install._delivery._load

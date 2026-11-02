@@ -96,5 +96,5 @@ def script(message, confirm, labels=('Continue', 'Cancel')):
         "else{'SCG_ROUTER_DIALOG_RESULT=cancel';exit 1}"
         % (_ps(ICON), _ps(message), (
             "$b=New-Object System.Windows.Forms.Button;$b.Text=%s;"
-            "$b.AutoSize=$true;$b.DialogResult='OK';$r.Controls.Add($b);"
+            "$b.AutoSize=$true;$b.DialogResult='OK';$r.Controls.Add($b);$f.AcceptButton=$b;"
         ) % _ps(labels[0]) if confirm else '', _ps(labels[-1])))

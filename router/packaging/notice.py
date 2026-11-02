@@ -1,7 +1,7 @@
 """Best-effort desktop notice after a healthy update (Python 3.9+).
 
 The picker loads at client startup, so the dialog offers Quit and reopen.
-It uses the macOS bundle, Windows Store identity or installed Linux app.
+It uses the macOS bundle, verified Windows lifecycle or installed Linux app.
 Later is always available. Linux offers restart only for an installed app.
 Remember the spawned dialog PID so later notices join it rather than stack.
 A dialog that exits immediately, such as without a display, leaves the notice
@@ -27,7 +27,7 @@ def _load(name):
     return module
 
 
-_atomic_write, _text, _native = (_load(name) for name in ('atomic_write', 'notice_text', 'windows_native'))
+_atomic_write, _text = (_load(name) for name in ('atomic_write', 'notice_text'))
 # Kept as a module name: the wording is pinned here by callers and tests.
 _message = _text.message
 dialog_names = _text.dialog_names  # the updater lists models the same way
@@ -40,7 +40,6 @@ DISMISS = 'Later'
 REOPEN = 'Quit and reopen'
 OK = 'OK'
 CODEX_BUNDLE_ID = 'com.openai.codex'
-WINDOWS_PACKAGE = 'OpenAI.Codex'
 LINUX_APP = 'chatgpt'
 PROBE_TIMEOUT = 5
 # A dialog that cannot render exits within this grace (zenity without a
@@ -232,6 +231,43 @@ def record_attachment(home, version, event):
             return False
         doc.update(version=version, attachment=event, clients='codex', at=_utcnow())
         doc.pop('shown', None)
+        doc.pop('completion_selected', None)
+        _atomic_write.replace_json(path, doc)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def record_client_change(home, version, event):
+    """Stage one restart reason for a changed, verified Codex setup target."""
+    try:
+        path = Path(home) / NOTICE_FILE
+        try:
+            doc = json.loads(path.read_text())
+        except (OSError, ValueError):
+            doc = {}
+        doc = doc if isinstance(doc, dict) else {}
+        if doc.get('client_change') == event:
+            return False
+        if doc.get('shown'):
+            doc.pop('names', None)
+        doc.update(version=version, client_change=event, clients='codex', at=_utcnow(),
+                   completion_selected=True)
+        doc.pop('shown', None)
+        _atomic_write.replace_json(path, doc)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def suppress_closed_client_restart(home):
+    """Do not queue a restart notice when the client can read settings on next launch."""
+    try:
+        path = Path(home) / NOTICE_FILE
+        doc = json.loads(path.read_text())
+        if not isinstance(doc, dict) or not (doc.get('attachment') or doc.get('client_change')):
+            return False
+        doc.update(shown=True, restart_pending=False, restart_result='not_open', freshness='unknown')
         _atomic_write.replace_json(path, doc)
         return True
     except (OSError, ValueError):
@@ -272,41 +308,6 @@ def _darwin_script(message, icon, restart=True):
     ])
 
 
-def _windows_restart():
-    """PowerShell that closes the Codex Store app and starts it again.
-
-    The app is an MSIX package, so it is started through its package
-    family identity rather than an executable path; `Get-StartApps` is the
-    documented fallback for the launch identity. The quit is scoped to
-    processes running out of that package: a host with only the Codex CLI
-    must not lose it, and without a resolved identity nothing is quit.
-    Everything is guarded: when the app cannot be found the dialog merely
-    closes.
-    """
-    return (
-        "try { "
-        "$pkg = Get-AppxPackage -Name '%s' -ErrorAction SilentlyContinue; "
-        "$aumid = $null; "
-        "if ($pkg) { "
-        "$entry = (Get-AppxPackageManifest $pkg).Package.Applications.Application "
-        "| Select-Object -First 1; "
-        "if ($entry) { $aumid = $pkg.PackageFamilyName + '!' + $entry.Id } }; "
-        "if (-not $aumid) { "
-        "$start = Get-StartApps | "
-        "Where-Object { $_.Name -match '^(Codex|ChatGPT)' } | Select-Object -First 1; "
-        "if ($start) { $aumid = $start.AppID } }; "
-        "if ($pkg) { "
-        "$root = $pkg.InstallLocation; "
-        "$procs = @(Get-Process -ErrorAction SilentlyContinue | "
-        "Where-Object { $_.Path -and $_.Path.StartsWith($root, 'OrdinalIgnoreCase') }); "
-        "foreach ($p in $procs) { try { [void]$p.CloseMainWindow() } catch { } }; "
-        "Start-Sleep -Seconds 3; "
-        "foreach ($p in $procs) { "
-        "try { if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force } } catch { } }; "
-        "if ($aumid) { Start-Process ('%s' + $aumid) } } "
-        "} catch { }" % (WINDOWS_PACKAGE, _native.APPS_FOLDER))
-
-
 def _linux_command(message, icon=None, app=None, restart=True):
     """argv for the Linux dialog, quitting and relaunching the app.
 
@@ -334,48 +335,8 @@ def _linux_command(message, icon=None, app=None, restart=True):
     return ['sh', '-c', script, 'scg-router'] + dialog
 
 
-def _windows_script(message, icon=None, restart=True):
-    quoted = message.replace("'", "''")
-    picture = ''
-    if icon:
-        picture = (
-            "$p = New-Object System.Windows.Forms.PictureBox; "
-            "$p.Image = [System.Drawing.Image]::FromFile('%s'); "
-            "$p.SizeMode = 'StretchImage'; $p.Width = 64; $p.Height = 64; "
-            "$f.Controls.Add($p); " % icon.replace("'", "''"))
-    reopen = (
-        "$r = New-Object System.Windows.Forms.Button; "
-        "$r.Text = 'Quit and reopen'; $r.Dock = 'Bottom'; "
-        "$r.Add_Click({ $f.Tag = 'reopen'; $f.Close() }); ")
-    if restart:
-        restart_block = ("if ($f.Tag -eq 'reopen') { %s }" % _windows_restart())
-        buttons = ("$f.Controls.Add($l); $f.Controls.Add($b); $f.Controls.Add($r); ")
-        dismiss = DISMISS
-    else:
-        reopen, restart_block = '', ''
-        buttons = "$f.Controls.Add($l); $f.Controls.Add($b); "
-        dismiss = OK
-    return (
-        "Add-Type -AssemblyName System.Windows.Forms; "
-        "Add-Type -AssemblyName System.Drawing; "
-        "$f = New-Object System.Windows.Forms.Form; "
-        "$f.Text = '%s'; $f.TopMost = $true; "
-        "$f.StartPosition = 'CenterScreen'; $f.AutoSize = $true; "
-        "$l = New-Object System.Windows.Forms.Label; "
-        "$l.Text = '%s'; $l.AutoSize = $true; $l.Dock = 'Top'; "
-        "%s"
-        "$b = New-Object System.Windows.Forms.Button; "
-        "$b.Text = '%s'; $b.Dock = 'Bottom'; "
-        "$b.Add_Click({ $f.Close() }); "
-        "%s"
-        "%s"
-        "[void]$f.ShowDialog(); "
-        "%s" % (TITLE, quoted, picture, dismiss, reopen, buttons, restart_block)
-    )
-
-
 def dialog_command(version, platform_name=None, which=None, icon=None,
-                   clients='codex', names=(), attachment=False):
+                   clients='codex', names=(), attachment=False, home=None):
     """argv for a one-shot dismissible restart dialog, or None.
 
     None means the platform is unknown or its dialog tool is missing, so
@@ -404,12 +365,8 @@ def dialog_command(version, platform_name=None, which=None, icon=None,
             app = LINUX_APP if restart and which(LINUX_APP) is not None else None
             return _linux_command(message, icon, app, restart)
         return None
-    if platform_name == 'win32':
-        powershell = which('powershell') or which('powershell.exe')
-        if powershell is None:
-            return None
-        return [powershell, '-NoProfile', '-WindowStyle', 'Hidden',
-                '-Command', _windows_script(message, icon, restart)]
+    if platform_name == 'win32' and home is not None:
+        return _load('notice_windows').command(home)
     return None
 
 
@@ -442,6 +399,11 @@ def show_pending(home, spawn=None, pid_alive=None, names=None):
     """
     if os.environ.get('ROUTER_NO_NOTICE') == '1':
         return False
+    if sys.platform == 'win32':
+        try:
+            return _load('notice_windows').offer(home, spawn=spawn or _spawn)
+        except (OSError, ValueError):
+            return False
     if spawn is None:
         spawn = _spawn
     if pid_alive is None:

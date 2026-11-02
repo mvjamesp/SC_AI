@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests._platform import symlink_or_skip
 from tests.claude_profile_sync_fixtures import fingerprint, load_helper
 
 records = load_helper('claude_profile_records')
@@ -76,7 +77,7 @@ class NativeIdentityTests(unittest.TestCase):
         self.managed.side_effect = OSError('private detail')
         self.assertIsNone(identity.third_party(self.profile))
 
-    def test_missing_invalid_or_redirected_device_id_is_never_initialized(self):
+    def test_missing_or_invalid_device_id_is_never_initialized(self):
         for data in (b'bad base64!', base64.b64encode(b'not-a-uuid')):
             self.device.write_bytes(data)
             before = fingerprint(self.profile)
@@ -85,9 +86,12 @@ class NativeIdentityTests(unittest.TestCase):
         self.device.unlink()
         self.assertIsNone(identity.third_party(self.profile))
         self.assertFalse(self.device.exists())
+
+    def test_redirected_device_id_is_never_initialized(self):
+        self.device.unlink()
         target = self.profile / 'other'
         target.write_bytes(base64.b64encode(ACCOUNT.encode()))
-        self.device.symlink_to(target)
+        symlink_or_skip(target, self.device)
         self.assertIsNone(identity.third_party(self.profile))
 
 

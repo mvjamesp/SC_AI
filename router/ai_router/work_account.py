@@ -1,7 +1,9 @@
 """Work-account setup; the Hub owns identity, company policy and key issuance."""
 import importlib.util
 import json
+import os
 import subprocess
+import threading
 import uuid
 from pathlib import Path
 
@@ -41,13 +43,18 @@ def configuration():
         raise SignInFailed('Work account setup needs IT attention.') from None
 
 
-def provision(config=None, authorize=None, post=None):
+def provision(config=None, authorize=None, post=None, *, cancelled=None):
     """Return the personal inference key in memory; never save OAuth tokens."""
     config = configuration() if config is None else config
     oauth = _load('download_oauth')
     try:
         authorization = {**config, 'scope': config['scope'] + ' openid profile'}
-        session = (authorize or oauth.authorize)(authorization)
+        if cancelled and cancelled():
+            return CANCELLED
+        session = (authorize(authorization) if authorize else
+                   oauth.authorize(authorization, cancelled=cancelled))
+        if cancelled and cancelled():
+            return CANCELLED
         body = (post or oauth.post)(config['provision_url'], b'{"confirm":true}',
             {'Authorization': 'Bearer ' + session['access_token'],
              'Content-Type': 'application/json'})
@@ -94,6 +101,56 @@ def _ask(dialog, tool_path, platform_name, question, items, run):
     return answer
 
 
+def _waiting(issue=None):
+    """Keep cancellation responsive; a cancelled result never reaches setup."""
+    native = _load('native_dialog')
+    cancelled, done = threading.Event(), threading.Event()
+    result = {}
+
+    def request():
+        try:
+            result['key'] = issue() if issue else provision(cancelled=cancelled.is_set)
+        except Exception as exc:
+            result['error'] = exc
+        finally:
+            done.set()
+
+    home = Path(os.environ['ROUTER_HOME']) if os.environ.get('ROUTER_HOME') else None
+    def stopped(progress):
+        code = progress.process.poll()
+        if code is None:
+            return False
+        cancelled.set()
+        if code not in (0, 1):
+            raise SignInFailed('The sign-in window could not open. Open SCG Router to try again.')
+        return True
+
+    try:
+        with native.Progress('Finish signing in in your browser. Preparing your work key can take '
+                             'a few minutes.\n\nCancel stops setup on this computer. '
+                             'A key request already sent may still finish.', home=home) as progress:
+            if stopped(progress):
+                return CANCELLED
+            threading.Thread(target=request, daemon=True).start()
+            while not done.wait(0.1):
+                if stopped(progress):
+                    return CANCELLED
+            if stopped(progress):
+                return CANCELLED
+            if 'error' in result:
+                error = result['error']
+                if isinstance(error, SignInFailed):
+                    raise error
+                raise SignInFailed('Work account sign-in could not finish. Try again or contact IT.')
+        if progress.cancelled or cancelled.is_set():
+            return CANCELLED
+        return result['key']
+    except (OSError, subprocess.SubprocessError):
+        raise SignInFailed('The sign-in window could not open. Open SCG Router to try again.') from None
+    finally:
+        cancelled.set()
+
+
 def collect(tool_path, platform_name, clients, run=None, issue=None):
     """Use the shared two-action chooser for sign-in and assistant choices."""
     run = run or subprocess.run
@@ -103,7 +160,10 @@ def collect(tool_path, platform_name, clients, run=None, issue=None):
         return CANCELLED
     if method == 'key':
         return MANUAL
-    fields = {'key': (issue or provision)()}
+    key = _waiting(issue)
+    if key is CANCELLED:
+        return CANCELLED
+    fields = {'key': key}
     for field, question, answers in key_dialog.questions(clients):
         table = key_dialog.STARTERS if field == 'profile' else key_dialog.MODES
         items = tuple((table[label], label) for label in answers)

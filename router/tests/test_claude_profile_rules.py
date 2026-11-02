@@ -15,6 +15,24 @@ SPEC.loader.exec_module(rules)
 
 
 class ProfileRulesTests(unittest.TestCase):
+    @unittest.skipUnless(ON_WINDOWS, 'Windows drive and UNC namespaces')
+    def test_filesystem_namespace_is_absolute_and_keeps_logical_paths_ordinary(self):
+        for text, expected in (
+                ('C:/Profiles/Caf\u00e9/file', '\\\\?\\C:\\Profiles\\Caf\u00e9\\file'),
+                ('//server/share/Caf\u00e9/file', '\\\\?\\UNC\\server\\share\\Caf\u00e9\\file')):
+            with self.subTest(path=text):
+                path = Path(text)
+                self.assertEqual(str(rules.io_path(path)), expected)
+                self.assertEqual(rules.ordinary_path(rules.io_path(path)), path)
+                self.assertEqual(rules.io_path(rules.io_path(path)), rules.io_path(path))
+        relative = Path('profile/../tasks')
+        self.assertTrue(rules.io_path(relative).is_absolute())
+        self.assertNotIn('..', rules.io_path(relative).parts)
+        with self.assertRaises(ValueError):
+            rules.io_path('\\\\.\\PhysicalDrive0')
+        with self.assertRaises(ValueError):
+            rules.io_path('\\\\?\\GLOBALROOT\\Device\\HarddiskVolume1')
+
     def test_sensitive_keys_and_names_are_case_insensitive_and_nested(self):
         doc = {'AccountName': 'x', 'nested': {'CLIENT_SECRET': 'x'},
                'safe': 1}
@@ -59,7 +77,7 @@ class ProfileRulesTests(unittest.TestCase):
         self.assertEqual(rules.rewrite_path(str(source / 'outputs'), *paths),
                          str(target / 'outputs'))
         self.assertEqual(rules.rewrite_path(str(source) + '-other', *paths),
-                         '/profiles/Claude/store/account/org/local_s-other')
+                         str(target) + '-other')
         self.assertEqual(rules.rewrite_path('/Users/test/N8N', *paths),
                          '/Users/test/N8N')
 

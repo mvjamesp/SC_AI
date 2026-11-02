@@ -9,6 +9,35 @@ import stat
 from pathlib import Path
 
 
+def ordinary_path(path):
+    """Keep Windows API namespace prefixes out of records and journal paths."""
+    text = str(path)
+    if os.name == 'nt':
+        if text.startswith('\\\\?\\UNC\\'):
+            text = '\\\\' + text[8:]
+        elif text.startswith('\\\\?\\'):
+            text = text[4:]
+            if not re.match(r'^[A-Za-z]:\\', text):
+                raise ValueError('unsupported device path')
+    return Path(text)
+
+
+def io_path(path):
+    """Use absolute Unicode Windows paths only at filesystem boundaries.
+
+    No resolve: callers must still inspect every ancestor for reparse points.
+    Relative paths become absolute before the extended namespace is added.
+    """
+    if os.name != 'nt':
+        return Path(path)
+    text = ntpath.abspath(str(ordinary_path(path)))
+    if text.startswith('\\\\.\\'):
+        raise ValueError('unsupported device path')
+    if text.startswith('\\\\'):
+        return Path('\\\\?\\UNC\\' + text[2:])
+    return Path('\\\\?\\' + text)
+
+
 DROP_KEYS = frozenset({
     'accountName', 'emailAddress', 'oauthAccount', 'userID',
     'org', 'orgId', 'orgUuid', 'organization', 'organizationId',
@@ -138,7 +167,7 @@ def skip(path, history=False):
 
 def regular(path):
     try:
-        return stat.S_ISREG(Path(path).lstat().st_mode)
+        return stat.S_ISREG(io_path(Path(path)).lstat().st_mode)
     except OSError:
         return False
 
@@ -212,20 +241,20 @@ def assert_clean_bytes(data, source):
 
 def assert_clean_file(source):
     path = Path(source)
-    if path.stat().st_size > 64 * 1024 * 1024:
+    if io_path(path).stat().st_size > 64 * 1024 * 1024:
         raise ValueError('artifact is too large to screen: %s' % source)
-    assert_clean_bytes(path.read_bytes(), source)
+    assert_clean_bytes(io_path(path).read_bytes(), source)
 
 
 def _write_text(target, output, mode=None):
     target = Path(target)
-    if target.exists():
-        existing = target.stat().st_mode & 0o777
+    if io_path(target).exists():
+        existing = io_path(target).stat().st_mode & 0o777
         mode = existing if mode is None else mode & existing
     elif mode is None:
         mode = 0o600
-    target.write_text(output, encoding='utf-8')
-    target.chmod(mode)
+    io_path(target).write_text(output, encoding='utf-8')
+    io_path(target).chmod(mode)
 
 
 def _merge_local(existing, incoming):
@@ -297,7 +326,7 @@ def assert_clean_record(doc):
 def copy_transcript(source, target, paths, mode=None):
     """Copy every row; rows without a relocated path keep their exact text."""
     lines = []
-    for line in io.StringIO(Path(source).read_text(encoding='utf-8')):
+    for line in io.StringIO(io_path(Path(source)).read_text(encoding='utf-8')):
         if not line.strip():
             lines.append(line)
             continue
@@ -319,14 +348,14 @@ def copy_transcript(source, target, paths, mode=None):
 
 def copy_file(source, target, paths, mode=None, *, conversation=False):
     source, target = Path(source), Path(target)
-    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    io_path(target.parent).mkdir(parents=True, exist_ok=True, mode=0o700)
     if conversation:
         copy_transcript(source, target, paths, mode)
         return
-    existing_mode = (target.stat().st_mode & 0o777
-                     if target.exists() else None)
+    existing_mode = (io_path(target).stat().st_mode & 0o777
+                     if io_path(target).exists() else None)
     # Task files, including integrity-chained audit logs, keep their exact bytes.
     assert_clean_file(source)
-    shutil.copy2(source, target)
+    shutil.copy2(io_path(source), io_path(target))
     if mode is not None:
-        target.chmod(mode if existing_mode is None else mode & existing_mode)
+        io_path(target).chmod(mode if existing_mode is None else mode & existing_mode)

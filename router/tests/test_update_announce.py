@@ -11,6 +11,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from tests.install_fixtures import install_mod
@@ -21,6 +22,8 @@ class AnnounceTests(unittest.TestCase):
 
     def setUp(self):
         self.updater = install_mod._updater
+        self.enterContext(mock.patch.object(self.updater._svc.notice, 'sys',
+                                            SimpleNamespace(platform='linux')))
 
     def _reply(self, payload):
         body = json.dumps(payload).encode()

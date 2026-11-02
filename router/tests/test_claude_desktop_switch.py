@@ -287,7 +287,7 @@ class SwitchTests(unittest.TestCase):
                 self.assertIn(label, script)
                 self.assertIn('"SCG Router"', script)
                 self.assertIn('buttons {"Cancel", "Continue"}', script)
-                self.assertIn(str(switcher.ICON), script)
+                self.assertIn(json.dumps(str(switcher.ICON), ensure_ascii=False), script)
                 for word in ('nonce', 'loopback', 'catalogue', 'token', 'endpoint', 'process'):
                     self.assertNotIn(word, script.lower())
 

@@ -8,6 +8,7 @@ import contextlib
 import json
 import unittest
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest import mock
 
 from ai_router import catalogue, model_prompt
@@ -35,6 +36,7 @@ class DialogOnceTests(unittest.TestCase):
         (self.home / 'mixed-router-state.json').write_text(json.dumps(self.state))
         model_prompt.pending(self.home)  # seed today's rows
         self.notice = install_mod._svc.notice
+        self.enterContext(mock.patch.object(self.notice, 'sys', SimpleNamespace(platform='linux')))
         self.dialogs = []
 
     @contextlib.contextmanager

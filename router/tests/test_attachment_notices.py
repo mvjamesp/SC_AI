@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from tests.test_notice import notice_mod as notice
@@ -12,6 +13,7 @@ from tests import test_client_choice as installs
 
 class AttachmentNotices(unittest.TestCase):
     def setUp(self):
+        self.enterContext(mock.patch.object(notice, 'sys', SimpleNamespace(platform='linux')))
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.home = Path(temp.name)
@@ -22,7 +24,7 @@ class AttachmentNotices(unittest.TestCase):
 
     def test_config_only_notice_offers_restart_and_later_once(self):
         self.assertTrue(notice.record_attachment(self.home, '1.0.0', 'a' * 32))
-        command = notice.dialog_command('1.0.0', 'win32', which=lambda _: 'powershell',
+        command = notice.dialog_command('1.0.0', 'darwin', which=lambda _: 'osascript',
                                         attachment=True)
         self.assertIn('Restart Codex to load SCG Router', command[-1])
         self.assertIn('Quit and reopen', command[-1])
@@ -47,6 +49,26 @@ class AttachmentNotices(unittest.TestCase):
             self.assertTrue(notice.show_pending(self.home, spawn=lambda _: 42,
                                                pid_alive=lambda _: True))
 
+    def test_relevant_client_change_gets_a_fresh_event_after_an_old_notice_was_seen(self):
+        notice.record_attachment(self.home, '1.0.0', 'a' * 32)
+        prior = json.loads(self.path.read_text())
+        self.path.write_text(json.dumps(dict(prior, shown=True, names=['Already announced'])))
+        self.assertTrue(notice.record_client_change(self.home, '1.0.1', 'new-event'))
+        current = json.loads(self.path.read_text())
+        self.assertNotIn('shown', current)
+        self.assertNotIn('names', current)
+        self.assertEqual(current['client_change'], 'new-event')
+        self.assertFalse(notice.record_client_change(self.home, '1.0.1', 'new-event'))
+
+    def test_closed_client_does_not_keep_a_restart_notice_queued(self):
+        notice.record_attachment(self.home, '1.0.0', 'a' * 32)
+        self.assertTrue(notice.suppress_closed_client_restart(self.home))
+        suppressed = json.loads(self.path.read_text())
+        self.assertTrue(suppressed['shown'])
+        self.assertFalse(suppressed['restart_pending'])
+        self.assertEqual(suppressed['restart_result'], 'not_open')
+        self.assertTrue(notice.suppress_closed_client_restart(self.home))
+
     def test_prior_dialog_does_not_consume_an_unshown_repair_reason(self):
         self.path.write_text(json.dumps(dict(version='1.0.0', shown=True, pid=42)))
         notice.record_attachment(self.home, '1.0.0', 'b' * 32)
@@ -57,7 +79,8 @@ class AttachmentNotices(unittest.TestCase):
     def test_installer_fixture_cannot_open_a_real_attachment_notice(self):
         owner = installs.install_mod._svc.notice
         owner.record_attachment(self.home, '1.0.0', 'c' * 32)
-        with mock.patch.object(owner, 'dialog_command', return_value=['synthetic-dialog']), \
+        with mock.patch.object(owner, 'sys', SimpleNamespace(platform='linux')), \
+                mock.patch.object(owner, 'dialog_command', return_value=['synthetic-dialog']), \
                 mock.patch.object(owner.subprocess, 'Popen') as spawn:
             with self.assertRaisesRegex(AssertionError, 'real dialog reached a test'):
                 owner.show_pending(self.home)

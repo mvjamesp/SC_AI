@@ -13,6 +13,7 @@ def _load(name, filename):
 
 
 _publish = _load('router_transaction_publish', 'claude_profile_publish.py')
+io_path = _publish._records._rules.io_path
 MANIFEST_NAME = _publish.MANIFEST_NAME
 PAIR_PHASES = _publish.PAIR_PHASES
 write_pair_manifest = _publish.write_pair_manifest
@@ -70,7 +71,7 @@ def _record_ownership(root, doc, paths):
     for row in doc['duplicates']:
         candidates.extend(_publish._safe_path(root, row[key]) for key in ('record', 'record_before'))
     for candidate in candidates:
-        if candidate.exists():
+        if io_path(candidate).exists():
             value = _publish._records.read_json(candidate)
             if _publish._records.session_id(value) != doc['session_id']:
                 raise ValueError('transaction ownership conflict')
@@ -80,7 +81,7 @@ def recover_manifest(root, path, doc):
     paths = _publish.validate(root, path, doc)
     _record_ownership(root, doc, paths)
     if doc['phase'] == 'committed':
-        if paths['stage'].exists() or paths['record_stage'].exists():
+        if io_path(paths['stage']).exists() or io_path(paths['record_stage']).exists():
             raise ValueError('transaction ownership conflict')
         _publish.finish(root, path, doc, paths)
         return 1
@@ -92,12 +93,12 @@ def recover_manifest(root, path, doc):
         key = 'record' if kind == 'file' else 'bundle'
         stage = paths['record_stage' if kind == 'file' else 'stage'] if canonical else None
         if (canonical and current == doc['after'][key]
-                and (current != before or (backup.exists() and not stage.exists()))):
+                and (current != before or (io_path(backup).exists() and not io_path(stage).exists()))):
             _publish.move_new(target, stage)
             if _publish.state(stage, kind) != doc['after'][key]:
                 raise ValueError('transaction displaced generation changed')
             current = None
-        if backup.exists():
+        if io_path(backup).exists():
             if current is not None:
                 raise ValueError('transaction target changed')
             _publish.move_new(backup, target)
@@ -112,12 +113,12 @@ def recover_manifest(root, path, doc):
             raise ValueError('transaction target changed')
     for key, kind, result in (('stage', 'tree', 'bundle'),
                               ('record_stage', 'file', 'record')):
-        if paths[key].exists():
+        if io_path(paths[key]).exists():
             _publish.delete_checked(paths[key], doc['after'][result], kind)
     for parent in {backup.parent for _, backup, _, _ in _publish.artifacts(root, doc)}:
-        if parent.exists():
-            parent.rmdir()
-    path.unlink()
+        if io_path(parent).exists():
+            io_path(parent).rmdir()
+    io_path(path).unlink()
     _publish._fsync_dir(root)
     return 1
 
@@ -126,10 +127,10 @@ def recover_store(store_root, errors=None, blocked=None, *, account=None):
     """Report only closed-set codes; retain ambiguous or unowned artifacts."""
     root = Path(store_root)
     _publish._records.assert_ancestors(root)
-    if not root.is_dir():
+    if not io_path(root).is_dir():
         return 0
     recovered = 0
-    for path in sorted(root.iterdir()):
+    for path in sorted(root / child.name for child in io_path(root).iterdir()):
         if not MANIFEST_NAME.fullmatch(path.name):
             continue
         doc = None
@@ -137,8 +138,8 @@ def recover_store(store_root, errors=None, blocked=None, *, account=None):
             if not _publish._records._rules.regular(path):
                 raise _publish.UnsafeManifest('invalid-journal')
             _publish._records.assert_ancestors(path)
-            _publish._winacl.require_owner_only(path)
-            doc = json.loads(path.read_text(encoding='utf-8'))
+            _publish._winacl.require_owner_only(io_path(path))
+            doc = json.loads(io_path(path).read_text(encoding='utf-8'))
             _publish.validate(root, path, doc)
             if account is not None:
                 accounts = {root / target.relative_to(root).parts[0]

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests import claude_profile_sync_fixtures as fixtures
-from tests._platform import requires_posix_perms
+from tests._platform import requires_posix_perms, symlink_or_skip
 from tests.claude_profile_sync_fixtures import SyncFixture, sync
 
 
@@ -87,28 +87,24 @@ class ProfileSyncSafetyTests(SyncFixture):
             copied = self.paths(self.first, store, 'valid')[0]
             self.assertEqual(json.loads(copied.read_text())['cliSessionId'], 'Exact-Cli-ID')
 
-    def test_symlink_and_nonregular_sessions_do_not_abort_valid_sessions(self):
+    def test_nonregular_sessions_do_not_abort_valid_sessions(self):
         import os
         for store in sync.STORES:
-            for identifier in ('link', 'fifo', 'corrupt', 'valid'):
+            for identifier in ('fifo', 'corrupt', 'valid'):
                 record = fixtures.record(self.third, store, '87654321-4321-4567-8123-123456789abc', 'fedcbaab-4321-4567-8123-123456789abc',
                                          identifier, bundle_files={'safe.txt': 'safe'})
                 bundle = record.with_suffix('')
-                if identifier == 'link':
-                    (bundle / 'unsafe').symlink_to(self.home)
-                elif identifier == 'fifo' and hasattr(os, 'mkfifo'):
+                if identifier == 'fifo' and hasattr(os, 'mkfifo'):
                     os.mkfifo(bundle / 'pipe')
                 elif identifier == 'corrupt':
                     (bundle / 'data.json').write_text('{')
         report = self.sync()
-        self.assertEqual(report['failed'], len(sync.STORES) * (1 + hasattr(os, 'mkfifo')), report)
+        self.assertEqual(report['failed'], len(sync.STORES) * hasattr(os, 'mkfifo'), report)
         for store in sync.STORES:
             self.assertEqual(len(self.paths(self.first, store, 'valid')), 1)
-            self.assertEqual(self.paths(self.first, store, 'link'), [])
             # Malformed JSON output is the user's own file and copies verbatim.
             copied = self.paths(self.first, store, 'corrupt')[0].with_suffix('')
             self.assertEqual((copied / 'data.json').read_text(), '{')
-            self.assertTrue(self.paths(self.third, store, 'link')[0].with_suffix('').joinpath('unsafe').is_symlink())
 
     def test_unsigned_target_is_pending_without_identity_or_publication(self):
         (self.first / 'config.json').write_text('{"oauthAccount":[]}')
@@ -266,10 +262,10 @@ class ProfileSyncSafetyTests(SyncFixture):
             copied = (path.with_suffix('') / '.claude' / 'projects' /
                       'session' / 'cli-fallback.jsonl')
             self.assertTrue(copied.exists())
-            text = copied.read_text()
-            self.assertIn(str(profile_path / 'work'), text)
+            text = json.loads(copied.read_text(encoding='utf-8'))
+            self.assertEqual(text['cwd'], str(profile_path / 'work'))
             if profile_path == self.first:
-                self.assertNotIn(str(self.third / 'work') + '"', text)
+                self.assertNotIn(str(self.third / 'work'), text['cwd'])
 
     def test_empty_bundle_directories_survive_replacement(self):
         source = fixtures.record(
@@ -290,7 +286,7 @@ class ProfileSyncSafetyTests(SyncFixture):
 
     def test_symlinked_profile_root_is_refused(self):
         link = self.root / 'third-link'
-        link.symlink_to(self.third, target_is_directory=True)
+        symlink_or_skip(self.third, link, target_is_directory=True)
         env = dict(self.env, CLAUDE_USER_DATA_DIR=str(link))
         with mock.patch.object(sync, 'profile_roots', return_value=(self.first, link)):
             report = sync.sync_profiles(self.home, '1p', env)

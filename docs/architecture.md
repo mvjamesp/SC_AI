@@ -97,6 +97,9 @@ That path never opens a chooser or warning. A held session lock leaves reload to
 provisioning endpoint. Public sign-in settings ship with the release. It reuses
 the PKCE transport in `download_oauth` and the shared client-choice dialog;
 the Hub owns company entitlement, workspace selection and personal-key budgets.
+The shared progress dialog stays open during sign-in and key preparation.
+Cancellation stops callback polling, prevents a later provisioning request and
+discards a late response before it can reach the local setup writer.
 `key_prompt` submits the result to the existing local setup writer. Work keys,
 OAuth tokens and management credentials never become release configuration.
 The Microsoft callback shows a self-contained Hub-style confirmation with bundled
@@ -122,6 +125,16 @@ Its separate receipt records presentation time only; it cannot
 clear verified facts or interfere with installation. Missing dialogs leave
 the warning pending. Controls bind manual-check results to installed version,
 channel and source before displaying them.
+
+`notice_windows` owns Windows restart presentation and calls the existing
+desktop identity, shutdown and visible-reopen checks. Retained setup resources
+keep it available after the updater's extraction is removed. Its dialog lock
+prevents stacked notices. Presentation and pending restart are separate facts:
+a failed restart stays pending with manual steps, without automatic repeat
+prompts. A selected completion journey suppresses background presentation even
+when its dialog was unavailable; this does not mark it shown or dismissed.
+Compared atomic writes preserve a newer notice that arrives meanwhile.
+Graphical setup suppresses detached notices while it owns completion guidance.
 
 ## Domains and direction
 
@@ -519,6 +532,10 @@ is in [runtime files](runtime-files.md#codex-usage-limit-record).
    connection cleanup: `ingress.py` owns auth/rebinding, body limits, GET
    routes and error shaping; `relay.py` owns the upstream relay loop; and
    `router.py` keeps drain/inflight plus POST orchestration over both.
+   Windows connection cleanup uses `client_close.py` to half-close the response
+   and discard at most 64 KiB of late request bytes within 250 ms, without
+   parsing request framing. This preserves early refusals for split-write
+   clients within that grace; POSIX keeps the standard-library close path.
    `transport.MAX_REQUEST_BYTES` (256 MiB) is the local hard ceiling on wire,
    decoded and prepared bytes for every route and encoding, checked by
    `ingress.read_body`, `router.Handler.admit` and again on every send in
@@ -728,6 +745,14 @@ protect backups without changing the permissions of hard-linked attachments
 outside the profile. Callers must stop Claude, hold both profile locks and
 provide a private, fully prepared bundle.
 
+The path rules convert Windows filesystem arguments to absolute extended Unicode
+paths, including network shares, so long session and transaction paths work with
+the default Windows path policy. Enumeration results return to ordinary paths
+before record projection or journal construction. Ancestor, reparse-point,
+ownership and generation checks cover the same paths through this boundary.
+The transaction layout and recovery phases stay unchanged. See Microsoft's
+[Windows path limits](https://learn.microsoft.com/windows/win32/fileio/maximum-file-path-limitation).
+
 `claude_profile_bundle.py` assembles the complete admitted bundle union before
 publication. It uses the shared transfer rules and retains unique duplicate
 content before retirement. Task files keep their exact bytes; transcript rows
@@ -741,6 +766,9 @@ a separate journal because those files sit outside the desktop bundle. A
 completed repair's original is checked by content, not file identity, so a
 copied home still validates; a writer that races the rename gets its file back
 and the next run repairs the new content.
+Canonical CLI files, their sibling journals and private originals use the same
+Windows filesystem boundary. The version-1 repair journal keeps ordinary file
+names and retains the open-handle identity and no-replace recovery checks.
 
 `claude_profile_sync.py` coordinates both directions under the two profile locks.
 Only the current account pair participates, and on the subscription side only

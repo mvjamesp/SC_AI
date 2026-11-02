@@ -10,6 +10,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 from urllib.parse import parse_qsl
 
@@ -141,6 +142,9 @@ class PendingNamesTests(unittest.TestCase):
 
 
 class DialogWiringTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(mock.patch.object(notice_mod, 'sys', SimpleNamespace(platform='linux')))
+
     def test_show_pending_hands_the_names_to_the_dialog(self):
         seen = {}
 
