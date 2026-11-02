@@ -369,20 +369,20 @@ class HandlerCharacterisationTests(unittest.TestCase):
             response.read()
         self.assertEqual(opened, [])
 
-    def test_prepare_keyerror_opens_no_window(self):
-        # KeyError subclasses LookupError: a malformed-payload indexing bug
-        # in prepare must keep the payload-error mapping, never the window.
-        from unittest import mock as _mock
-        from ai_router import key_store as _key_store
+    def test_prepare_indexing_errors_never_request_a_replacement_key(self):
+        # Payload lookup failures must neither open setup nor tell users to do it.
         server, home, opened = self._window_server('sk-live\n')
-        with _mock.patch.object(_key_store, 'check_key', return_value=('k', 10, 0)):
-            with _mock.patch('ai_router.providers.ExternalResponsesProvider.prepare',
-                             side_effect=KeyError('fragments')):
+        for error in (KeyError('fragments'), IndexError('tool item')):
+            with self.subTest(error=type(error).__name__), mock.patch(
+                    'ai_router.providers.ExternalResponsesProvider.prepare', side_effect=error):
                 response = _post(server.server_port, '/test-token/responses',
                                  {'model': 'z-ai/glm-5.3', 'input': []})
-                body = response.read().decode()
+                body = json.loads(response.read())
+                self.assertEqual(response.status, 400)
+                self.assertEqual(body['error']['code'], 'INVALID_PAYLOAD')
+                self.assertNotIn('key', body['error']['message'])
         self.assertEqual(opened, [])
-        self.assertNotIn('setup page', body)
+        self.assertEqual((home / 'openrouter.key').read_text(), 'sk-live\n')
 
     def test_env_key_present_answers_raw_401_without_probe(self):
         # The file is not the effective credential when the env key is set:

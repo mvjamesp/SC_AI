@@ -99,6 +99,26 @@ class MessageStyleTests(unittest.TestCase):
                 self.assertEqual((case.status, case.code), expected)
 
 
+class ClientErrorMappingTests(unittest.TestCase):
+    def test_payload_lookup_failures_never_imply_a_bad_key(self):
+        for failure in (KeyError, IndexError):
+            for detail in ('fragments', 'api key', 'unknown model: private input'):
+                with self.subTest(failure=failure.__name__, detail=detail):
+                    error = errors.map_client_error(failure(detail))
+                    self.assertEqual((error.status, error.code), (400, 'INVALID_PAYLOAD'))
+                    self.assertIsNone(error.detail)
+                    self.assertNotIn(detail, json.dumps(error.body()))
+
+    def test_real_credential_failures_keep_their_recovery_messages(self):
+        cases = ((LookupError('missing credential'), 'CREDENTIAL_PROBLEM'),
+                 (ValueError('OpenCode credential is not an API key'), 'CREDENTIAL_PROBLEM'),
+                 (PermissionError('unreadable credential'), 'CREDENTIAL_PERMISSION'),
+                 (errors.CredentialCheckUnavailable('query failed'), 'CREDENTIAL_CHECK_UNAVAILABLE'))
+        for failure, code in cases:
+            with self.subTest(code=code):
+                self.assertEqual(errors.map_client_error(failure).code, code)
+
+
 class DetailStaysInTheLogTests(unittest.TestCase):
     def _handler(self, sent):
         return SimpleNamespace(server=SimpleNamespace(state={'token': 'token'}),

@@ -273,7 +273,7 @@ def map_client_error(exc):
         return error
     if isinstance(exc, PermissionError):
         return credential_permission(str(exc))
-    if isinstance(exc, LookupError):
+    if isinstance(exc, LookupError) and not isinstance(exc, (KeyError, IndexError)):
         return credential_problem(detail=str(exc))
     if isinstance(exc, UnknownModel):
         return unknown_model(exc.model, exc.candidates)
@@ -281,7 +281,7 @@ def map_client_error(exc):
         return claude_subscription_required()
     if isinstance(exc, SubscriptionRequired):
         return subscription_required()
-    if isinstance(exc, (ValueError, KeyError)):
+    if isinstance(exc, ValueError):
         text = str(exc)
         lowered = text.lower()
         if 'not in the configured catalog' in text or 'unknown model:' in lowered:
