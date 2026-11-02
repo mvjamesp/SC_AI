@@ -88,8 +88,11 @@ class DesktopManagementTests(unittest.TestCase):
             home.mkdir()
             (home / 'mixed-router-state.json').write_text('{}')
             run = mock.Mock()
+            dialog = mock.MagicMock()
+            dialog.Progress.return_value.__enter__.return_value.cancelled = False
             with mock.patch.object(setup, 'run_installer', return_value=SimpleNamespace(
-                    returncode=0, stdout='deferred: another router operation is in progress\n')):
+                    returncode=0, stdout='deferred: another router operation is in progress\n')), \
+                    mock.patch.object(setup, 'load', return_value=dialog):
                 with self.assertRaises(ValueError):
                     setup._key(source, home, replace=True, run=run)
             run.assert_not_called()

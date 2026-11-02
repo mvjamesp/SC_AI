@@ -117,7 +117,11 @@ def _key(resources, home, replace=False, run=subprocess.run):
         if not diagnostics._provider_defs().unhandled(Path(home), state, diagnostics._key_private):
             return 0
     if replace:
-        result = run_installer(resources, home, ['--setup'])
+        with load('native_dialog').Progress('Opening key setup. This can take a few minutes.\n\n'
+                'Cancel closes setup after the current step finishes.', home=home) as progress:
+            result = run_installer(resources, home, ['--setup'])
+        if progress.cancelled:
+            return 2
         if not _succeeded(result):
             raise ValueError('The key window could not be prepared. Try setup again.')
         state = read_json(Path(home) / 'mixed-router-state.json')
