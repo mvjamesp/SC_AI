@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from tests.claude_profile_sync_fixtures import load_helper
-from tests._platform import requires_posix_perms
+from tests._platform import requires_posix_perms, symlink_or_skip
 
 policy = load_helper('claude_desktop_policy')
 
@@ -112,19 +112,20 @@ class DesktopPolicyTests(unittest.TestCase):
         outside = self.root / 'outside.json'
         outside.write_text('{}')
         self.entry.unlink()
-        self.entry.symlink_to(outside)
+        symlink_or_skip(outside, self.entry)
         with self.assertRaises(OSError):
             self.check('linux', {})
 
-    def test_non_utf8_and_redirected_local_library_refuse(self):
+    def test_non_utf8_local_entry_refuses(self):
         self.entry.write_bytes('{}'.encode('utf-16'))
         with self.assertRaises(OSError):
             self.check('linux', {})
-        self.entry.write_text('{}')
+
+    def test_redirected_local_library_refuses(self):
         library = self.entry.parent
         relocated = self.profile / 'redirected'
         library.rename(relocated)
-        library.symlink_to(relocated, target_is_directory=True)
+        symlink_or_skip(relocated, library, target_is_directory=True)
         with self.assertRaises(OSError):
             self.check('linux', {})
 

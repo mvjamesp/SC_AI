@@ -16,6 +16,28 @@ oauth = auth._oauth
 
 
 class OAuthTests(unittest.TestCase):
+    def test_cancellation_before_browser_launch_does_not_open_or_exchange_tokens(self):
+        server = mock.MagicMock(server_port=54321)
+        server.__enter__.return_value = server
+        with mock.patch.object(oauth.http.server, 'HTTPServer', return_value=server), \
+                mock.patch.object(oauth.webbrowser, 'open') as browser, \
+                mock.patch.object(oauth, 'post') as post, self.assertRaises(oauth.SignInRequired):
+            oauth.authorize(CONFIG, cancelled=lambda: True)
+        browser.assert_not_called()
+        post.assert_not_called()
+
+    def test_cancellation_closes_the_callback_without_exchanging_a_late_code(self):
+        cancelled = threading.Event()
+        server = mock.MagicMock(server_port=54321, result=None)
+        server.__enter__.return_value = server
+        server.handle_request.side_effect = cancelled.set
+        with mock.patch.object(oauth.http.server, 'HTTPServer', return_value=server), \
+                mock.patch.object(oauth.webbrowser, 'open', return_value=True), \
+                mock.patch.object(oauth, 'post') as post, self.assertRaises(oauth.SignInRequired):
+            oauth.authorize(CONFIG, cancelled=cancelled.is_set)
+        server.__exit__.assert_called_once()
+        post.assert_not_called()
+
     def test_callback_shows_branded_confirmation_without_exposing_the_code(self):
         with oauth.http.server.HTTPServer(('127.0.0.1', 0), oauth._Callback) as server:
             server.state, server.result = 'right', None
@@ -37,13 +59,14 @@ class OAuthTests(unittest.TestCase):
                 connection.close()
                 worker.join(timeout=5)
         self.assertEqual(server.result, 'synthetic-private-code')
-        self.assertIn("You're signed in", body)
+        self.assertIn('Continue in SCG Router', body)
         self.assertIn('You can close this tab.', body)
         self.assertIn('alt="Software Combined"', body)
         self.assertIn('data:image/png;base64,', body)
         self.assertEqual(body.count('data:font/woff2;base64,'), 2)
         self.assertNotIn('synthetic-private-code', body)
-        self.assertNotIn('return to', body.lower())
+        self.assertIn('Return to SCG Router to finish setup.', body)
+        self.assertNotIn("You're signed in", body)
         self.assertNotIn('__NONCE__', body)
         self.assertIn('history.replaceState(null,"","/complete")', body)
         nonce = re.search(r'<script nonce="([A-Za-z0-9_-]+)">', body)[1]

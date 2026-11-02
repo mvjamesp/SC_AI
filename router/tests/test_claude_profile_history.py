@@ -1,6 +1,7 @@
 """Foreign diagnostics must not be replayed as Anthropic response evidence."""
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,84 @@ from tests.claude_profile_sync_fixtures import load_helper
 history = load_helper('claude_profile_history')
 
 
+def raw_path(path):
+    """Independent fixture/inspection spelling; product calls receive ordinary paths."""
+    path = Path(path).absolute()
+    return Path('\\\\?\\' + str(path)) if os.name == 'nt' else path
+
+
+def cleanup_history_root(case, root):
+    root = Path(root).resolve()
+    case.assertEqual(root.parent, Path(tempfile.gettempdir()).resolve())
+    case.addCleanup(shutil.rmtree, raw_path(root))
+
+
+def long_history(case):
+    temporary = tempfile.TemporaryDirectory()
+    case.addCleanup(temporary.cleanup)
+    root = Path(temporary.name).resolve()
+    cleanup_history_root(case, root)
+    path = root / 'cli/projects' / ('workspace-' + 'w' * 135) / ('history-' + 'h' * 65 + '.jsonl')
+    case.assertGreater(len(str(path)), 260)
+    raw_path(path.parent).mkdir(parents=True)
+    return path
+
+
 class HistoryTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows extended-length history paths')
+    def test_long_existing_history_repairs_and_quietly_repeats(self):
+        path = long_history(self)
+        message = {'id': 'foreign-id', 'content': 'Caf\u00e9 \u65e5\u672c\u0085\u2028\u2029'}
+        row = {'type': 'assistant', 'requestId': 'foreign-request', 'message': message}
+        original = (json.dumps(row, ensure_ascii=False) + '\n').encode('utf-8')
+        raw_path(path).write_bytes(original)
+        self.assertEqual(history.repair_file(path), 'repaired')
+        actual = json.loads(raw_path(path).read_bytes())
+        self.assertEqual(actual['message'], message)
+        self.assertEqual(actual['providerRequestId'], row['requestId'])
+        self.assertNotIn('requestId', actual)
+        files = list(raw_path(path.parent).iterdir())
+        backup = next(item for item in files if item.suffix == '.original')
+        journal = next(item for item in files if item.suffix == '.journal')
+        self.assertGreater(len(str(backup)[4:]), 260)
+        self.assertEqual(backup.read_bytes(), original)
+        history._publish._winacl.require_owner_only(backup)
+        doc = json.loads(journal.read_bytes())
+        self.assertEqual(doc['version'], 1)
+        self.assertEqual(doc['target'], path.name)
+        self.assertTrue(all('/' not in doc[key] and '\\' not in doc[key]
+                            for key in ('target', 'backup', 'stage')))
+        before = {item.name: (item.read_bytes(), item.stat().st_mtime_ns) for item in files}
+        self.assertEqual(history.repair_file(path), 'unchanged')
+        self.assertEqual({item.name: (item.read_bytes(), item.stat().st_mtime_ns)
+                          for item in raw_path(path.parent).iterdir()}, before)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows extended-length history paths')
+    def test_long_mutated_original_is_refused_without_more_changes(self):
+        path = long_history(self)
+        raw_path(path).write_bytes(b'{"type":"assistant","requestId":"foreign","message":{"id":"external"}}\n')
+        self.assertEqual(history.repair_file(path), 'repaired')
+        backup = next(raw_path(path.parent).glob('*.original'))
+        backup.write_bytes(b'competing backup writer')
+        before = {item.name: item.read_bytes() for item in raw_path(path.parent).iterdir()}
+        with self.assertRaises(ValueError):
+            history.repair_file(path)
+        self.assertEqual({item.name: item.read_bytes()
+                          for item in raw_path(path.parent).iterdir()}, before)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows extended-length history paths')
+    def test_long_hardlinked_history_is_refused_unchanged(self):
+        path = long_history(self)
+        original = b'{"type":"assistant","requestId":"foreign","message":{"id":"external"}}\n'
+        raw_path(path).write_bytes(original)
+        alias = path.with_name('alias.jsonl')
+        os.link(raw_path(path), raw_path(alias))
+        with self.assertRaises(ValueError):
+            history.repair_file(path)
+        self.assertEqual(raw_path(path).read_bytes(), original)
+        self.assertEqual(raw_path(alias).read_bytes(), original)
+        self.assertEqual(len(list(raw_path(path.parent).iterdir())), 2)
+
     def test_projection_preserves_content_and_ids_but_separates_foreign_diagnostics(self):
         rows = [
             {'type': 'assistant', 'requestId': 'req-native',

@@ -55,7 +55,7 @@ def run_installer(resources, home, flags=(), run=subprocess.run):
         if '--desktop' not in args and 'claude-desktop' in attached:
             args.append('--desktop')
     env = environment(resources)
-    env.update(ROUTER_NO_KEY_WINDOW='1', ROUTER_NO_CLIENT_CHOOSER='1')
+    env.update(ROUTER_NO_KEY_WINDOW='1', ROUTER_NO_CLIENT_CHOOSER='1', ROUTER_NO_NOTICE='1')
     env['SCG_NATIVE_RESOURCES'] = str(resources)
     return load('install_delivery').run_logged(home, 'setup',
         'key' if key else 'repair' if repair else 'install',
@@ -110,11 +110,12 @@ def _missing_assistant(flags, dialog):
 
 
 def _key(resources, home, replace=False, run=subprocess.run):
+    """Return the key window's outcome: 0 saved/usable, 1 reported failure, 2 cancel."""
     state = read_json(Path(home) / 'mixed-router-state.json')
     if not replace:
         diagnostics = load('diagnostics')
         if not diagnostics._provider_defs().unhandled(Path(home), state, diagnostics._key_private):
-            return
+            return 0
     if replace:
         result = run_installer(resources, home, ['--setup'])
         if not _succeeded(result):
@@ -122,7 +123,7 @@ def _key(resources, home, replace=False, run=subprocess.run):
         state = read_json(Path(home) / 'mixed-router-state.json')
     setup = state.get('setup', {})
     if not setup.get('nonce') or setup.get('expires', 0) <= time.time():
-        return
+        return 0
     doc = metadata(resources)
     python = Path(resources) / 'runtime' / doc['runtime_exec']
     url = 'http://127.0.0.1:%s/%s/setup/%s' % (state['port'], state['token'], setup['nonce'])
@@ -139,7 +140,9 @@ def _key(resources, home, replace=False, run=subprocess.run):
                   '--clients', clients], input=url + '\n',
                  capture_output=True, text=True, timeout=900, cwd=release,
                  env=dict(environment(resources), ROUTER_HOME=str(home)))
-    if result.returncode not in (0, 2):
+    if result.returncode in (1, 2):
+        return result.returncode
+    if result.returncode != 0:
         raise ValueError('The key window could not finish. Open SCG Router to try again.')
     # Claude Code was attached before the window saved the Claude choice.
     mode = read_json(Path(home) / 'mixed-router-state.json').get('claude_mode')
@@ -148,6 +151,7 @@ def _key(resources, home, replace=False, run=subprocess.run):
             and not _succeeded(run_installer(resources, home, ['--claude-mode', mode]))):
         raise ValueError('Claude Code could not be set up for your Claude choice. '
                          'Open SCG Router to try again.')
+    return 0
 
 
 def _claude_on_openrouter(home, dialog):
@@ -272,14 +276,29 @@ def onboard(resources, home, action=None):
         _check(resources, home, dialog)
         return 0
     if action == 'key':
-        _key(resources, home, replace=True)
-        return 0
+        return 1 if _key(resources, home, replace=True) == 1 else 0
     doc = metadata(resources)
     if action == 'remove':
         return _remove(resources, home, dialog, doc)
     flags = _select(dialog) if not existing or action == 'add' else ['--repair']
     if flags is None or ('--clients' in flags and _missing_assistant(flags, dialog)):
         return 0
+    restart = load('setup_restart')
+    codex_config_before = restart.target(home) if sys.platform == 'win32' else None
+    codex_was_running = False
+    selected_clients = flags[flags.index('--clients') + 1] if '--clients' in flags else None
+    includes_codex = selected_clients in ('codex', 'both')
+    if selected_clients is None:
+        try:
+            includes_codex = 'codex' in load('codex_config').read_receipt(home).get('clients', {})
+        except (OSError, ValueError):
+            includes_codex = False
+    if sys.platform == 'win32' and includes_codex:
+        try:
+            codex_was_running = load('claude_desktop_platform').is_running(
+                'win32', app=load('codex_desktop_switch').CODEX)
+        except (OSError, subprocess.SubprocessError):
+            pass
     with dialog.Progress() as progress:
         permanent = retained(resources, home)
         python = permanent / 'runtime' / doc['runtime_exec']
@@ -311,7 +330,11 @@ def onboard(resources, home, action=None):
                         {'version': doc['version'], 'started': time.time(), 'confirmed_clients': []})
     if progress.cancelled:
         return 0
-    _key(permanent, home)
+    key_result = _key(permanent, home)
+    if key_result in (1, 2):
+        return 1 if key_result == 1 else 0
+    if restart.offer(home, codex_config_before, codex_was_running):
+        return 0
     _check(permanent, home, dialog)
     return 0
 

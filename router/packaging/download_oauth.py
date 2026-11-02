@@ -156,7 +156,7 @@ class _Callback(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def authorize(config):
+def authorize(config, *, cancelled=None):
     """Bind before opening the system browser; one bounded loopback callback."""
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
@@ -173,15 +173,21 @@ def authorize(config):
                       'code_challenge': challenge, 'code_challenge_method': 'S256'}
             url = ('https://login.microsoftonline.com/' + config['tenant_id']
                    + '/oauth2/v2.0/authorize?' + urllib.parse.urlencode(fields))
+            if cancelled and cancelled():
+                raise SignInRequired('signin_failed')
             if not webbrowser.open(url, new=1, autoraise=True):
                 raise SignInRequired('signin_failed')
             deadline = time.monotonic() + 180
             while server.result is None and time.monotonic() < deadline:
+                if cancelled and cancelled():
+                    raise SignInRequired('signin_failed')
                 server.handle_request()
             if not server.result:
                 raise SignInRequired('signin_failed')
             code = server.result
     except (OSError, webbrowser.Error):
         raise SignInRequired('signin_failed') from None
+    if cancelled and cancelled():
+        raise SignInRequired('signin_failed')
     return _token(config, {'grant_type': 'authorization_code', 'code': code,
                           'redirect_uri': redirect_uri, 'code_verifier': verifier})

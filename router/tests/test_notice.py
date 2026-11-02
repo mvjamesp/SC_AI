@@ -303,51 +303,16 @@ class DialogCommandTests(unittest.TestCase):
         self.assertIsNone(notice_mod.dialog_command(
             '1.0.1', platform_name='linux', which=lambda name: None))
 
-    def test_win32_uses_powershell_form(self):
-        cmd = notice_mod.dialog_command(
-            '1.0.1', platform_name='win32',
-            which=lambda name: r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
-            if name == 'powershell' else None)
-        self.assertIn('powershell', cmd[0].lower())
-        script = cmd[cmd.index('-Command') + 1]
-        self.assertIn('$b.Text = \'Later\'', script)
-        self.assertIn('$r.Text = \'Quit and reopen\'', script)
-        self.assertIn('SCG Router', script)
-        self.assertIn(MSG, script)
+    def test_win32_uses_the_retained_notice_worker(self):
+        worker = mock.Mock(command=mock.Mock(return_value=['retained-python', 'notice-worker']))
+        with mock.patch.object(notice_mod, '_load', return_value=worker):
+            self.assertEqual(notice_mod.dialog_command(
+                '1.0.1', platform_name='win32', home=Path('/synthetic/home')),
+                ['retained-python', 'notice-worker'])
+        worker.command.assert_called_once_with(Path('/synthetic/home'))
 
-    def test_win32_restart_closes_and_relaunches_the_app(self):
-        cmd = notice_mod.dialog_command(
-            '1.0.1', platform_name='win32',
-            which=lambda name: r'C:\powershell.exe')
-        script = cmd[cmd.index('-Command') + 1]
-        self.assertIn("$f.Tag = 'reopen'", script)
-        self.assertIn("if ($f.Tag -eq 'reopen')", script)
-        # The Codex desktop app is an MSIX package, so it is relaunched
-        # through its package identity, not an executable path.
-        self.assertIn("Get-AppxPackage -Name 'OpenAI.Codex'", script)
-        self.assertIn("$pkg.PackageFamilyName + '!' + $entry.Id", script)
-        self.assertIn("Get-StartApps", script)
-        self.assertIn("shell:AppsFolder", script)
-        self.assertIn('CloseMainWindow()', script)
-        self.assertIn('Stop-Process -Id $p.Id -Force', script)
-
-    def test_win32_restart_is_scoped_to_that_package(self):
-        # A host with only the Codex CLI must not lose it: nothing is quit
-        # by process name, and the whole quit block is inside `if ($pkg)`.
-        cmd = notice_mod.dialog_command(
-            '1.0.1', platform_name='win32',
-            which=lambda name: r'C:\powershell.exe')
-        script = cmd[cmd.index('-Command') + 1]
-        self.assertNotIn('Get-Process -Name Codex', script)
-        self.assertNotIn("Get-Process -Name ChatGPT", script)
-        self.assertIn('$_.Path.StartsWith($root', script)
-        head, _, tail = script.partition('if ($pkg) {')
-        self.assertIn('Stop-Process', tail)
-        self.assertNotIn('Stop-Process', head)
-
-    def test_win32_without_powershell_is_none(self):
-        self.assertIsNone(notice_mod.dialog_command(
-            '1.0.1', platform_name='win32', which=lambda name: None))
+    def test_win32_without_retained_home_stays_pending(self):
+        self.assertIsNone(notice_mod.dialog_command('1.0.1', platform_name='win32'))
 
     def test_unknown_platform_is_none(self):
         self.assertIsNone(notice_mod.dialog_command(
@@ -362,8 +327,8 @@ class ReleaseBundleTests(unittest.TestCase):
             'router_release', root / 'packaging' / 'release.py')
         release_mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(release_mod)
-        for member in ('packaging/notice.py', 'packaging/notice_text.py',
-                       'packaging/assets/router-icon.png'):
+        for member in ('packaging/notice.py', 'packaging/notice_text.py', 'packaging/notice_windows.py',
+                       'packaging/setup_restart.py', 'packaging/assets/router-icon.png'):
             self.assertIn(member, release_mod.bundle_files(root))
         self.assertTrue(
             (root / 'packaging' / 'assets' / 'router-icon.png').is_file())

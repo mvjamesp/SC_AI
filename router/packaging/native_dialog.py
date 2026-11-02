@@ -103,6 +103,8 @@ class Progress:
         self.cancelled = self.process.poll() is not None
         if self.process.poll() is None:
             self.process.terminate()
+        else:
+            self.cancelled = True
         try:
             self.process.communicate(timeout=5)
         except subprocess.TimeoutExpired:

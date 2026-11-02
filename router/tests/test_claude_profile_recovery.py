@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+from tests._platform import symlink_or_skip
 from tests.claude_profile_sync_fixtures import PairFixture, fingerprint
 
 
@@ -153,17 +154,20 @@ class ProfileRecoveryTests(PairFixture):
         self.assertEqual(errors, ['invalid-journal'])
         self.assertEqual(fingerprint(self.store), before)
 
-    def test_unowned_backup_names_and_symlink_manifest_are_untouched(self):
+    def test_unowned_backup_names_are_untouched(self):
         backup = self.ns / 'local_same.duplicate-backup-user.json'
         backup.write_text('unowned')
+        self.assertEqual(self.transaction.recover_store(self.store), 0)
+        self.assertEqual(backup.read_text(), 'unowned')
+
+    def test_symlink_manifest_is_untouched(self):
         external = self.root / 'external.json'
         external.write_text('[]')
         marker = self.store / ('.claude-profile-transaction-' + 'b' * 32 + '.json')
-        marker.symlink_to(external)
+        symlink_or_skip(external, marker)
         errors = []
         self.assertEqual(self.transaction.recover_store(self.store, errors), 0)
         self.assertEqual(errors, ['invalid-journal'])
-        self.assertEqual(backup.read_text(), 'unowned')
         self.assertEqual(external.read_text(), '[]')
 
     def test_changed_committed_pair_keeps_all_backups(self):
@@ -181,7 +185,7 @@ class ProfileRecoveryTests(PairFixture):
 
     def test_symlink_store_and_ancestor_never_traverse_or_create(self):
         link = self.root / 'link'
-        link.symlink_to(self.store, target_is_directory=True)
+        symlink_or_skip(self.store, link, target_is_directory=True)
         for root in (link, link / 'child'):
             with self.assertRaises(ValueError):
                 self.transaction.recover_store(root)

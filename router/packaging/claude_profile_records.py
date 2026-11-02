@@ -20,6 +20,8 @@ def _load(name, filename):
 _desktop = _load('router_claude_records_desktop', 'claude_desktop_config.py')
 _rules = _load('router_claude_records_rules', 'claude_profile_rules.py')
 _identity = _load('router_claude_profile_identity', 'claude_profile_identity.py')
+io_path = _rules.io_path
+ordinary_path = _rules.ordinary_path
 
 # Only Code tasks are shared in the 1.0.0 beta. Cowork layout support below stays
 # tested; add 'local-agent-mode-sessions' back here to share Cowork tasks again.
@@ -34,7 +36,7 @@ def assert_ancestors(path):
     path = Path(path).absolute()
     for current in reversed((path,) + tuple(path.parents)):
         try:
-            info = current.lstat()
+            info = io_path(current).lstat()
         except FileNotFoundError:
             continue
         if (stat.S_ISLNK(info.st_mode)
@@ -55,9 +57,10 @@ def assert_target(path, root):
         if not _rules.safe_component(part):
             raise ValueError('unsafe session path')
         current /= part
-        if current.is_symlink():
+        if io_path(current).is_symlink():
             raise ValueError('unsafe session path')
-    resolved_root, resolved = root.resolve(), path.resolve()
+    resolved_root = ordinary_path(io_path(root).resolve())
+    resolved = ordinary_path(io_path(path).resolve())
     if resolved != resolved_root and resolved_root not in resolved.parents:
         raise ValueError('unsafe session path')
 
@@ -75,7 +78,7 @@ def read_json(path):
     if not _rules.regular(path):
         raise ValueError('invalid-record')
     try:
-        doc = json.loads(Path(path).read_text(encoding='utf-8'))
+        doc = json.loads(io_path(Path(path)).read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
         raise ValueError('invalid JSON: %s' % path) from exc
     if not isinstance(doc, dict):
@@ -88,7 +91,7 @@ def _receipt_third_party(home):
         return None
     path = Path(home) / RECEIPT_NAME
     assert_ancestors(path)
-    if not path.exists():
+    if not io_path(path).exists():
         return None
     clients = read_json(path).get('clients', {})
     if not isinstance(clients, dict):
@@ -130,16 +133,16 @@ def _identity_variants(value, store_name):
 def namespace_paths(store_root):
     store_root = Path(store_root)
     assert_ancestors(store_root)
-    if not store_root.is_dir():
+    if not io_path(store_root).is_dir():
         return []
     paths = []
-    for account in store_root.iterdir():
-        if (not account.is_dir() or account.is_symlink()
+    for account in (store_root / child.name for child in io_path(store_root).iterdir()):
+        if (not io_path(account).is_dir() or io_path(account).is_symlink()
                 or _rules.skip(Path(account.name))
                 or not safe_target(account, store_root)):
             continue
-        for org in account.iterdir():
-            if (not org.is_dir() or org.is_symlink()
+        for org in (account / child.name for child in io_path(account).iterdir()):
+            if (not io_path(org).is_dir() or io_path(org).is_symlink()
                     or _rules.skip(Path(org.name))
                     or not safe_target(org, store_root)):
                 continue
@@ -180,7 +183,7 @@ def resolve_namespace(store_root, profile_root, *, third_party=False):
 def record_paths(store_root, include_irregular=False, *, account=None, org=None):
     store_root = Path(store_root)
     assert_ancestors(store_root)
-    if not store_root.is_dir():
+    if not io_path(store_root).is_dir():
         return []
     records = []
     for account_dir, org_dir in namespace_paths(store_root):
@@ -190,8 +193,8 @@ def record_paths(store_root, include_irregular=False, *, account=None, org=None)
         containers = [org_dir]
         if store_root.name == 'local-agent-mode-sessions' and safe_target(org_dir / 'agent', store_root):
             containers.append(org_dir / 'agent')
-        records.extend(path for container in containers for path in container.glob(RECORD_GLOB)
-                       if include_irregular or (_rules.regular(path) and not path.is_symlink()))
+        records.extend(path for container in containers for path in (container / child.name for child in io_path(container).glob(RECORD_GLOB))
+                       if include_irregular or (_rules.regular(path) and not io_path(path).is_symlink()))
     return sorted(records)
 
 
@@ -204,13 +207,13 @@ def valid_pair_paths(store_root, record, bundle, identifier):
     match = NATIVE_SESSION.fullmatch(record.stem)
     if (store_root.name != 'local-agent-mode-sessions' or not match
             or identifier != record.stem or bundle != record.parent / match[1]
-            or record.with_suffix('').exists() or record.with_suffix('').is_symlink()):
+            or io_path(record.with_suffix('')).exists() or io_path(record.with_suffix('')).is_symlink()):
         return False
     # Native full directories win; only unresolved abbreviations can collide.
-    for other in record.parent.glob('local_' + match[1] + '-*.json'):
+    for other in (record.parent / child.name for child in io_path(record.parent).glob('local_' + match[1] + '-*.json')):
         if other != record and NATIVE_SESSION.fullmatch(other.stem):
             assert_ancestors(other.with_suffix(''))
-            if not other.with_suffix('').is_dir():
+            if not io_path(other.with_suffix('')).is_dir():
                 return False
     return True
 
@@ -219,13 +222,13 @@ def bundle_path(record, store_root):
     full = record.with_suffix('')
     assert_target(full, store_root)
     match = NATIVE_SESSION.fullmatch(record.stem)
-    if full.exists() or store_root.name != 'local-agent-mode-sessions' or not match:
+    if io_path(full).exists() or store_root.name != 'local-agent-mode-sessions' or not match:
         return full
     short = record.parent / match[1]
     assert_target(short, store_root)
-    if not short.exists():
+    if not io_path(short).exists():
         return full
-    if not short.is_dir() or not valid_pair_paths(store_root, record, short, session_id(read_json(record))):
+    if not io_path(short).is_dir() or not valid_pair_paths(store_root, record, short, session_id(read_json(record))):
         raise ValueError('ambiguous session bundle')
     return short
 
@@ -240,7 +243,7 @@ def session_id(record):
 def group_records(store_root, include_irregular=False, *, account=None, org=None):
     groups = {}
     for path in record_paths(store_root, include_irregular, account=account, org=org):
-        if path.is_symlink() or not _rules.regular(path):
+        if io_path(path).is_symlink() or not _rules.regular(path):
             continue
         try:
             identifier = session_id(read_json(path))
@@ -252,10 +255,10 @@ def group_records(store_root, include_irregular=False, *, account=None, org=None
 
 def record_state(path):
     path = Path(path)
-    stat_result = path.lstat()
+    stat_result = io_path(path).lstat()
     return ((stat_result.st_mode, stat_result.st_size,
              stat_result.st_mtime_ns, stat_result.st_ino),
-            hashlib.sha256(path.read_bytes()).hexdigest())
+            hashlib.sha256(io_path(path).read_bytes()).hexdigest())
 
 
 def record_snapshot(paths):

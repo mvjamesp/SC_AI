@@ -1,15 +1,97 @@
 """Observable races at the pair publisher, not retired helper APIs."""
+import contextlib
 import json
 import os
 import shutil
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from tests.claude_profile_sync_fixtures import PairFixture
 
 
 class ProfilePublishTests(PairFixture):
+    def test_relative_store_keeps_relative_journal_authority(self):
+        with contextlib.chdir(self.root):
+            for name in ('store', 'ns', 'record', 'bundle', 'stage'):
+                setattr(self, name, getattr(self, name).relative_to(self.root))
+            manifest = self.manifest()
+            self.assertFalse(manifest.is_absolute())
+            self.transaction.publish_pair(manifest, self.text)
+            self.assertEqual(json.loads(self.record.read_bytes())['title'], 'new')
+            self.assertFalse(manifest.exists())
+
+    def long_pair(self):
+        """Build fixtures through the Windows API spelling, independent of product code."""
+        previous = self.store
+        self.store = self.root / ('profile-' + 'a' * 100) / ('sessions-' + 'b' * 100)
+        self.assertIn(self.root, self.store.parents)
+        native = Path('\\\\?\\' + str(self.store))
+        shutil.copytree(previous, native)
+        self.addCleanup(shutil.rmtree, native)
+        for name in ('ns', 'record', 'bundle', 'stage'):
+            setattr(self, name, self.store / getattr(self, name).relative_to(previous))
+        self.assertGreater(len(str(self.record)), 260)
+        return native
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows extended-length filesystem paths')
+    def test_long_path_commit_recovery_and_rollback_preserve_exact_data(self):
+        for boundary in (None, 'bundle-published', 'committed'):
+            with self.subTest(boundary=boundary):
+                self.setUp()
+                native = self.long_pair()
+                record = native / self.record.relative_to(self.store)
+                before = record.read_bytes()
+                text = json.dumps({'sessionId': 'same', 'title': 'Caf\u00e9 \u65e5\u672c',
+                                   'path': str(self.bundle / 'outputs/new.txt')},
+                                  ensure_ascii=False)
+                manifest = self.transaction.write_pair_manifest(
+                    self.store, self.record, self.bundle, text, self.stage)
+                journal = native / manifest.name
+                doc = json.loads(journal.read_bytes())
+                self.assertNotIn('\\\\?\\', json.dumps(doc))
+                update = self.publish.update_pair_manifest
+
+                def interrupt(path, phase):
+                    result = update(path, phase)
+                    if phase == boundary:
+                        raise SystemExit('synthetic process interruption')
+                    return result
+
+                with mock.patch.object(self.publish, 'update_pair_manifest', side_effect=interrupt):
+                    if boundary:
+                        with self.assertRaises(SystemExit):
+                            self.transaction.publish_pair(manifest, text)
+                    else:
+                        self.transaction.publish_pair(manifest, text)
+                if boundary:
+                    self.assertEqual(self.transaction.recover_store(self.store), 1)
+                if boundary == 'bundle-published':
+                    self.assertEqual(record.read_bytes(), before)
+                    self.assertEqual((record.with_suffix('') / 'outputs/old.txt').read_bytes(), b'old')
+                else:
+                    self.assertEqual(json.loads(record.read_bytes()), json.loads(text))
+                    self.assertEqual((record.with_suffix('') / 'outputs/new.txt').read_bytes(), b'new')
+                self.assertFalse(journal.exists())
+                self.assertEqual(self.transaction.recover_store(self.store), 0)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows extended-length filesystem paths')
+    def test_long_path_journal_escape_refuses_without_changing_originals(self):
+        native = self.long_pair()
+        manifest = self.manifest()
+        journal = native / manifest.name
+        doc = json.loads(journal.read_bytes())
+        doc['record'] = '../outside.json'
+        journal.write_text(json.dumps(doc), encoding='utf-8')
+        record = native / self.record.relative_to(self.store)
+        before = record.read_bytes()
+        errors = []
+        self.assertEqual(self.transaction.recover_store(self.store, errors), 0)
+        self.assertEqual(errors, ['invalid-journal'])
+        self.assertEqual(record.read_bytes(), before)
+        self.assertTrue(journal.exists())
+
     @unittest.skipIf(os.name == 'nt', 'POSIX file permissions')
     def test_hardlinked_attachment_preserves_external_original_during_commit_and_recovery(self):
         for interrupted in (False, True):
@@ -200,7 +282,8 @@ class ProfilePublishTests(PairFixture):
             self.transaction.publish_pair(manifest, self.text)
 
     def test_windows_private_controls_use_winacl(self):
-        with mock.patch.object(self.publish.os, 'name', 'nt'), mock.patch.object(
+        expected = self.publish.io_path(self.record)
+        with mock.patch.object(self.publish, 'os', SimpleNamespace(name='nt')), mock.patch.object(
                 self.publish._winacl, 'require_owner_only') as gate:
             self.publish.private(self.record)
-        gate.assert_called_once_with(self.record, windows=True)
+        gate.assert_called_once_with(expected, windows=True)
