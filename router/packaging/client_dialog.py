@@ -115,7 +115,7 @@ def _windows_script(question, items, labels):
     choices = ','.join("'%s'" % label.replace("'", "''")
                        for label in _labels(items))
     return ("Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
-            "$f = New-Object System.Windows.Forms.Form; "
+            "$f = New-Object System.Windows.Forms.Form; $f.TopMost = $true; "
             "$f.AutoSize = $true; $f.AutoSizeMode = 'GrowAndShrink'; $f.StartPosition = 'CenterScreen'; "
             "$f.Text = '%s'; %s"
             "$p = New-Object System.Windows.Forms.FlowLayoutPanel; "
@@ -142,6 +142,7 @@ def _windows_script(question, items, labels):
             "$p.Controls.Add($l); $p.Controls.Add($b); $p.Controls.Add($r); "
             "$f.Controls.Add($p); $f.AcceptButton = $ok; "
             "$f.CancelButton = $c; "
+            "$f.Add_Shown({ $f.Activate(); $b.Focus() }); "
             "if ($f.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) "
             "{ exit 2 }; Write-Output $b.SelectedItem"
             % (TITLE, icon_line, question.replace("'", "''"), choices,
