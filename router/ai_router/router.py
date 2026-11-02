@@ -270,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.error(errors.retryable_preparation(str(exc)))
             return self.error(errors.preparation(str(exc)))
         except LookupError as exc:
-            if isinstance(exc, KeyError):
+            if isinstance(exc, (KeyError, IndexError)):
                 # Malformed payload/tool-fragment indexing, not keylessness:
                 # keep the original payload-error mapping and open no window.
                 return self.error(errors.map_client_error(exc))
@@ -279,7 +279,7 @@ class Handler(BaseHTTPRequestHandler):
             setup.open_key_window(self.server, self.server.credentials.home, pid)
             return self.error(errors.credential_problem(
                 detail='%s: %s' % (provider_defs.label_for(pid), exc)))
-        except (ValueError, KeyError, OSError, zstd.ZstdError,
+        except (ValueError, OSError, zstd.ZstdError,
                 AttributeError, TypeError, RecursionError) as exc:
             err = errors.map_client_error(exc)
             if err.code == 'INTERNAL_ERROR':

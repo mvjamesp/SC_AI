@@ -1,5 +1,41 @@
 # Compatibility
 
+## Router 1.3.36 release checks, 2 November 2026 AEDT
+
+Clients: Codex desktop `26.1027.51404` (build `23880`), bundled CLI
+`0.166.0-alpha.5.1`, and Claude Code `2.1.309`. The desktop build changed
+since the preceding record, so all four route checks ran again with synthetic
+data and requested Low effort.
+
+| Client and route | Requested model | Counted work | Result |
+| --- | --- | --- | --- |
+| Codex / OpenRouter | `z-ai/glm-5.3-flash` | 2 upstream attempts | Tool round trip passed |
+| Codex / ChatGPT subscription | `gpt-6-luna` | 1 invocation, 1 tool call | Tool result and final marker passed |
+| Claude Code / OpenRouter | `z-ai/glm-5.3-flash` | 3 upstream attempts, 2 sequential reads | Paired results and final markers passed |
+| Claude Code / Claude subscription | `claude-sonnet-5-5` | 1 invocation, 1 read | Paired result and final marker passed |
+
+The external legs used an isolated candidate router from this working tree,
+with a shared twelve-attempt cap, 512 KiB input and at most 65,536 output tokens
+per attempt. Five attempts ran across both clients. Claude also had a USD 0.25
+client budget and 2,048 output tokens per request. Both protocols reported the
+requested model; Codex also reported Low effort. Claude's served effort was
+unverified.
+
+Subscription checks used the existing client sign-ins without copying credentials.
+The Codex check used the desktop's bundled app server and one synthetic tool.
+The Claude check used restricted mode, no hooks or connectors, only Read in a
+temporary working directory, at most two turns, 2,048 output tokens per request
+and a USD 0.20 client budget. Claude reported the requested model; Codex's served
+identity and both subscription checks' upstream attempt counts and served effort
+remain unverified. Provider reports do not independently attest model weights
+or reasoning compute.
+
+The installer-enabled offline suite ran 3,933 tests with 38 skips and no failures.
+Focused error and credential-persistence tests, compilation, source limits and
+policy scans passed. Publication, automatic installed updates and Windows-device
+acceptance remain separate gates; these checks do not establish delivery to
+every installation.
+
 ## Router 1.3.32 release checks, 30 October 2026 AEDT
 
 Clients: Codex desktop `26.1027.30824` (build `22943`), bundled CLI

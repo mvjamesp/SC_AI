@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.3.36
+
+- Report malformed request fields as request failures without asking users to
+  replace a working key or opening key setup. Keep genuine credential recovery.
+- Verify that saved keys remain usable across updates, client mode changes and
+  source layout changes, including the move into `SC_AI/router`.
+
 ## 1.3.35
 
 - Share Claude tasks, repair canonical CLI history and recover interrupted
