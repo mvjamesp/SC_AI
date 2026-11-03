@@ -9,9 +9,12 @@ receipt entry recording the pre-attach snapshot, and an exact detach.
 Loaded through the installer's explicit file-import pattern and shipped
 in the release bundle. No runtime/protocol import here.
 """
+import base64
+import binascii
 import hashlib
 import json
 import os
+import re
 import sys
 import uuid
 import importlib.util as _ilu
@@ -146,14 +149,14 @@ def merge_entry(state, path):
     return doc, changed, previous
 
 
-def write_json(path, doc):
+def write_json(path, doc, *, expected=atomic_write._ANY):
     """Atomically replace a desktop JSON file with owner-only permissions."""
     path = Path(path)
     if path.parent and not path.parent.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + '.router.tmp')
     try:
-        atomic_write.replace_json(path, doc, tmp_name=tmp.name)
+        atomic_write.replace_json(path, doc, tmp_name=tmp.name, expected=expected)
     except atomic_write.StaleTmp:
         # A crash between create and replace leaves the deterministic tmp
         # behind; the writer clears it once and retries, and only a lost
@@ -173,6 +176,61 @@ def restore_entry(path, previous):
     write_json(path, doc)
 
 
+def operational_snapshot(home, state, entry, receipts):
+    """Prove routing only; an opaque vendor API value grants no restore authority."""
+    conflict = _removal._json.Conflict
+    receipt_path = receipts.receipt_path_for(home)
+    raw = _removal.read(receipt_path)
+    receipt = _removal._json.document(raw or '{}')
+    if (receipt_path.is_symlink() or receipt.get('version') != 2
+            or not isinstance(receipt.get('clients'), dict)
+            or receipt['clients'].get(CLIENT_KEY) != entry or not isinstance(entry, dict)):
+        raise conflict('damaged_receipt')
+    keys = OWNED_KEYS + ('deploymentMode',)
+    previous = _removal._json.snapshot(entry.get('inserted_block'), keys)
+    if (set(previous) != set(keys) or any(value is not None and not isinstance(value, str)
+                                        for value in previous.values())
+            or previous['deploymentMode'] not in (None, '1p', '3p')
+            or type(state.get('port')) is not int or not 0 < state['port'] < 65536
+            or not isinstance(state.get('token'), str) or not state['token']
+            or entry.get('written') != desired_values(state)):
+        raise conflict('damaged_receipt')
+    path = _removal.entry_path(entry)
+    if path.parent.name != 'configLibrary' or path.is_symlink():
+        raise conflict('connection_changed')
+    meta_path, config_path = path.parent / '_meta.json', path.parents[1] / 'claude_desktop_config.json'
+    state_path = Path(home) / 'mixed-router-state.json'
+    texts = {p: _removal.read(p) for p in (meta_path, path, config_path, state_path)}
+    saved_state = _removal._json.document(texts[state_path] or '{}')
+    if any(saved_state.get(key) != state.get(key) for key in ('port', 'token')):
+        raise conflict('connection_changed')
+    meta = _removal._json.document(texts[meta_path] or '{}')
+    applied = meta.get('appliedId')
+    if (meta.get('hybridPointer') or not isinstance(applied, str)
+            or not re.fullmatch(r'[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}', applied)
+            or path.name != applied + '.json'):
+        raise conflict('connection_changed')
+    current = _removal._json.document(texts[path] or '{}')
+    mode = _removal._json.document(texts[config_path] or '{}').get('deploymentMode', '1p')
+    if (mode not in ('1p', '3p') or current.get('bootstrapUrl')
+            or any(current.get(key) != desired_values(state)[key] for key in OWNED_KEYS[:-1])):
+        raise conflict('connection_changed')
+    value = current.get(API_KEY_KEY)
+    if value != API_KEY_VALUE:
+        if not isinstance(value, str) or not value.startswith('__sealed__:v1:'):
+            raise conflict('connection_changed')
+        payload = value[len('__sealed__:v1:'):]
+        try:
+            opaque = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError):
+            raise conflict('connection_changed') from None
+        if not opaque or base64.b64encode(opaque).decode('ascii') != payload:
+            raise conflict('connection_changed')
+    for target, before in {receipt_path: raw, **texts}.items():
+        atomic_write.check_unchanged(target, before)
+    return previous
+
+
 def _owned_snapshot(home, data_dir, state, receipts):
     """Only the same applied entry with matching router settings is owned."""
     existing = receipts.read_receipt(home).get('clients', {}).get(CLIENT_KEY, {})
@@ -185,7 +243,7 @@ def _owned_snapshot(home, data_dir, state, receipts):
             return None
         current = read_entry(path)
         if any(current.get(key) != value for key, value in desired_values(state).items()):
-            return None
+            return operational_snapshot(home, state, existing, receipts)
         return snapshot
     except (OSError, ValueError, TypeError, KeyError, SystemExit):
         return None
@@ -283,8 +341,14 @@ def attach(home, state, receipts, data_dir_override=None, env=None, *, python=No
             'appliedId': entry_id,
             'entries': [{'id': entry_id, 'name': 'SCG Router'}]})
     entry_path = applied_entry_path(data_dir)
+    if owned is not None and read_entry(entry_path).get(API_KEY_KEY) != API_KEY_VALUE:
+        operational_snapshot(home, state, existing, receipts)
+        if python is not None:
+            _install_switch_launcher(home, python, env)
+        return entry_path
+    entry_before = entry_path.read_bytes() if entry_path.exists() else None
     doc, _, previous = merge_entry(state, entry_path)
-    write_json(entry_path, doc)
+    write_json(entry_path, doc, expected=entry_before)
     if owned is not None:
         # Mode switching does not change attachment or the restore authority.
         previous = owned

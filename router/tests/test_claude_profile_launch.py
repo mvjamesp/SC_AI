@@ -80,9 +80,10 @@ class ProfileLaunchTests(unittest.TestCase):
         platform_ops = FakePlatform(events)
         original_write = desktop_config.write_json
 
-        def write(path, doc):
+        def write(path, doc, *, expected):
             events.append('mode')
-            return original_write(path, doc)
+            self.assertEqual(expected, path.read_bytes())
+            return original_write(path, doc, expected=expected)
 
         with mock.patch.object(switcher._desktop, 'write_json',
                                side_effect=write):

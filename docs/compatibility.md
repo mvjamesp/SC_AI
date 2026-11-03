@@ -1,5 +1,21 @@
 # Compatibility
 
+## Router 1.3.38 sealed-setting source checks, 3 November 2026 AEDT
+
+Claude desktop `4.4212.0` seals the saved gateway API field on startup.
+Static vendor source inspection identified the supported `__sealed__:v1:`
+marker followed by a nonempty base64 payload. No saved user value was decrypted.
+
+Offline regressions simulate startup sealing, repeated attachment and guarded
+mode switching. They check exact entry and receipt preservation, invalid and
+duplicate JSON refusal, concurrent changes, and retained repair warnings.
+Strict detach and mixed-client removal still refuse the opaque field before
+any settings or service changes. Recognition proves routing ownership only;
+it cannot prove the sealed plaintext or successful client decryption.
+
+Real startup, switching and a routed reply with this candidate remain pending.
+Source checks do not establish installed delivery or native app acceptance.
+
 ## Router 1.3.36 release checks, 2 November 2026 AEDT
 
 Clients: Codex desktop `26.1027.51404` (build `23880`), bundled CLI

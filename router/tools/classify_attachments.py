@@ -23,7 +23,7 @@ REASONS = frozenset(('damaged_receipt', 'marker_conflict', 'unsupported_structur
 
 
 def classify(home, python=None):
-    """Use the repair/removal proof without applying it or making network requests."""
+    """Report routing ownership; opaque desktop fields can still refuse removal."""
     owner, removal = _load('codex_config'), _load('client_removal')
     owner._owned.PYTHON = python
     home = Path(home)
@@ -51,7 +51,13 @@ def classify(home, python=None):
             if name == 'codex':
                 owner.removal_plan(removal.entry_path(entry), entry)
             else:
-                removal.json_plan(home, name, entry)
+                try:
+                    removal.json_plan(home, name, entry)
+                except removal._json.Conflict as exc:
+                    if name != 'claude-desktop' or str(exc) != 'connection_changed':
+                        raise
+                    state = removal._json.document((home / 'mixed-router-state.json').read_text())
+                    _load('claude_desktop_config').operational_snapshot(home, state, entry, owner)
             result['clients'][name] = dict(classification='owned')
         except (OSError, ValueError, TypeError, KeyError, SystemExit) as exc:
             reason = 'unreadable' if isinstance(exc, OSError) else getattr(exc, 'reason', str(exc))
