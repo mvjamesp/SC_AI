@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.3.37
+
+- Show progress while opening key setup, honor Cancel before the key window
+  opens, and bring Windows setup choices in front of the active app.
+
 ## 1.3.36
 
 - Report malformed request fields as request failures without asking users to

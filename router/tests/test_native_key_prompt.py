@@ -12,6 +12,57 @@ from tests.test_native_setup import module, resources
 
 
 class NativeKeyPromptTests(unittest.TestCase):
+    def test_replacement_shows_progress_until_the_key_prompt_opens(self):
+        self.check_replacement_preparation(cancelled=False)
+
+    def test_cancelled_replacement_preparation_does_not_open_the_key_prompt(self):
+        self.check_replacement_preparation(cancelled=True)
+
+    def check_replacement_preparation(self, cancelled):
+        setup = module('native_setup')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = resources(root / 'download')
+            home = root / 'home'
+            home.mkdir()
+            (home / 'current').write_text('1.2.0')
+            key = home / 'openrouter.key'
+            key.write_bytes(b'synthetic-existing-key')
+            state = home / 'mixed-router-state.json'
+            state.write_text(json.dumps(dict(clients='codex', port=1, token='synthetic',
+                                            setup=dict(nonce='test', expires=2000))))
+            before = state.read_bytes()
+            dialog = mock.MagicMock()
+            context = dialog.Progress.return_value
+            progress = context.__enter__.return_value
+            progress.cancelled = False
+            context.__exit__.side_effect = lambda *args: setattr(progress, 'cancelled', cancelled)
+
+            def prepare(*args):
+                self.assertTrue(context.__enter__.called)
+                context.__exit__.assert_not_called()
+                return SimpleNamespace(returncode=0)
+
+            def prompt(*args, **kwargs):
+                self.assertTrue(context.__exit__.called)
+                self.assertIn('ai_router.key_prompt', args[0])
+                return SimpleNamespace(returncode=0)
+
+            run = mock.Mock(side_effect=prompt)
+            load = setup.load
+            with mock.patch.object(setup, 'load', side_effect=lambda name:
+                    dialog if name == 'native_dialog' else load(name)), \
+                    mock.patch.object(setup, 'run_installer', side_effect=prepare) as installer, \
+                    mock.patch.object(setup.time, 'time', return_value=1000):
+                self.assertEqual(setup._key(source, home, replace=True, run=run),
+                                 2 if cancelled else 0)
+            installer.assert_called_once_with(source, home, ['--setup'])
+            self.assertEqual(dialog.Progress.call_args.kwargs['home'], home)
+            self.assertIn('Opening key setup', dialog.Progress.call_args.args[0])
+            self.assertEqual(run.call_count, 0 if cancelled else 1)
+            self.assertEqual(key.read_bytes(), b'synthetic-existing-key')
+            self.assertEqual(state.read_bytes(), before)
+
     def test_repair_skips_the_key_window_when_the_saved_key_is_usable(self):
         self.check_prompt(usable=True)
 

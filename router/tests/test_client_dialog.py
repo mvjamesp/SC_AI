@@ -103,6 +103,8 @@ class ClientDialogTests(unittest.TestCase):
         self.assertIn("$ok.DialogResult = 'OK'", script)
         self.assertIn("$c.DialogResult = 'Cancel'", script)
         self.assertIn('$f.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK', script)
+        self.assertIn('$f.TopMost = $true', script)
+        self.assertIn('$f.Add_Shown({ $f.Activate(); $b.Focus() })', script)
 
     def test_linux_offers_both_with_a_single_default(self):
         command = dialog.argv('zenity', 'linux', dialog.ASSISTANT_QUESTION,

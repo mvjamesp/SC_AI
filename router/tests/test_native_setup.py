@@ -151,8 +151,13 @@ class NativePayloadTests(unittest.TestCase):
                 clients='claude', port=1, token='synthetic', setup=dict(nonce='test', expires=2000))))
             invoke = setup.run_installer
             run = mock.Mock(return_value=SimpleNamespace(returncode=0))
+            dialog = mock.MagicMock()
+            dialog.Progress.return_value.__enter__.return_value.cancelled = False
+            load = setup.load
             with mock.patch.object(setup, 'run_installer', side_effect=lambda *args:
-                    invoke(*args, run=run)), mock.patch.object(setup.time, 'time', return_value=1000):
+                    invoke(*args, run=run)), mock.patch.object(setup.time, 'time', return_value=1000), \
+                    mock.patch.object(setup, 'load', side_effect=lambda name:
+                        dialog if name == 'native_dialog' else load(name)):
                 setup._key(source, home, replace=True, run=run)
             first, key = run.call_args_list
             self.assertEqual(first.args[0].count('--setup'), 1)
