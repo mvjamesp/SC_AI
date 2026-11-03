@@ -1,6 +1,6 @@
 ---
 name: ai-agent-factory-method
-description: Run the AI Agent Factory Method with persistent project owners and temporary subagents, or maintain its bundled plain-language HTML progress view. Use to start, resume or evaluate a project team. Tracker-only use does not create a team.
+description: Set up, resume or evaluate a project team using its existing instructions, persistent owners and adaptable role templates. Run the AI Agent Factory Method or maintain its bundled HTML progress view. Tracker-only use does not create a team.
 ---
 
 # AI Agent Factory Method
@@ -21,6 +21,27 @@ production, recurrence, paid-operation or data-retention permission.
 
 For a progress page without a Factory team, use the [bundled template guide](references/status-view.md)
 only. Keep the project's existing owners and workflow.
+
+## Set up for this project
+
+When asked to use Factory, first read the applicable project and repository
+instructions, such as `AGENTS.md` or the host's equivalent. Every role follows
+them. For work without a repository, use the project's existing instruction
+sources. Resolve the requested outcome, current owners, work records and
+authority before changing the team.
+
+Use the [project role guide](references/role-setup.md) for setup or a role change.
+It contains ten optional starting roles and a compact owner brief. Read only
+the selected role definitions. Adapt, combine or add roles for the actual work;
+the library is not a requirement to create ten owners. Reuse the current
+manager and owners. On a new project, establish only the missing records and
+owner bindings that the assignment and host permit.
+
+Keep stable role duties separate from changing assignments. They can be
+sections in existing records; new folders and files are optional. Give each
+owner an explicit role and a route to its current work. Directory names,
+chat titles and Markdown links alone do not establish identity or loading.
+Verify setup with one useful result before extending the team.
 
 ## Keep durable owners
 
@@ -89,7 +110,7 @@ Reuse the project's backlog, tracker, repository, checks and release path.
 Do not create a competing work list or a runtime framework to use this method.
 For a new team, prove one useful outcome in one area before expanding it.
 
-Keep one current record per outcome in the existing plan, tracker or issue,
+Keep one current record per outcome in the existing roster, plan, tracker or issue,
 and link it from the role roster. Store only what another actor needs to act
 correctly without reconstructing the old transcript. A compact record can be:
 
@@ -107,11 +128,25 @@ copying them into every record. Fill routine details from available sources.
 Ask only when missing authority, ownership or a required decision affects the
 next action. Mark harmless unknowns `not recorded`.
 
-Read the current record before resumed work, shared-state writes or subagent
-dispatch. Check the owner, revision, authority and next action. If ownership
-transferred, stop that assignment and report its current owner; an old message
-does not reverse the transfer. A new assignment does not erase pending decisions
-or change explicit constraints.
+Read the current record from its owning source before resumed work, shared-state
+writes or subagent dispatch. On resume, read it again even if a compaction
+summary includes an earlier read. Check the owner, revision, authority and
+next action. If ownership transferred, stop that assignment and report its
+current owner; an old message does not reverse the transfer. A new assignment
+does not erase pending decisions or change explicit constraints.
+
+At startup or after lost context, read the assigned role definition and the
+project instructions that apply. Reuse unchanged reads still visible in context;
+recheck only the relevant current record before affected writes or dispatch.
+If the role or authority cannot be resolved, hold those actions and report the
+missing binding. Do not infer a role from a folder or assume portable access
+to the chat's own ID. Client loading and compaction need actual verification.
+
+A current explicit human reassignment takes precedence over stale records.
+Have each record's authorised writer reconcile it, and settle existing resource
+claims before overlapping writes or dispatch. Independent authorised preparation
+can continue. Preserve existing authorisation within its scope without asking
+for the same permission again.
 
 One writer owns each record, including during transfer. Re-read its revision
 before writing; if it changed, recover the new state first. Update it in place.

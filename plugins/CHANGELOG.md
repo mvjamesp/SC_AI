@@ -1,5 +1,15 @@
 # Changelog
 
+## scg-agent-factory 0.4.0 (2026-11-03)
+
+- Start from the project's instructions, existing owners and current work.
+  Adapt ten optional role templates, combine responsibilities and reuse records.
+- Give each owner an explicit role and a recovery instruction in the project's
+  loaded rules. Read current facts afresh after compaction, preserve valid human
+  reassignment and verify client recovery.
+- Add role-setup and compaction cases to the existing continuity check without
+  imposing role folders, model choices, new approval rounds or a fixed team.
+
 ## scg-agent-factory 0.3.2 (2026-11-02)
 
 - For projects with several active workstreams, the project manager normally
