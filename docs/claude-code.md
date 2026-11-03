@@ -353,6 +353,12 @@ select your folder, choose a model and type your task. No key copying or
 Developer-menu configuration is needed. Attachment also runs when there is no
 newer router release.
 
+Claude may seal the saved gateway placeholder when it starts. Router recognises
+the supported sealed format only when the existing attachment receipt and
+all routing settings still match. Setup preserves the sealed entry, receipt
+and selected connection. This check does not decrypt the value or prove its
+original text. Changed routing or an unrecognised value still refuses setup.
+
 The task-sharing candidate detects the signed-in account and workspace when
 you open a Code task. On macOS, setup installs that background callback
 automatically; you do not enter account IDs or choose profile folders. The
@@ -391,8 +397,12 @@ between the `Claude` and `Claude-3p` profiles, with their JSON records and task
 files. Cowork tasks (`local-agent-mode-sessions`) stay in their own profile in
 this beta. Cloud conversations are not local session files and
 are outside this transfer. The desktop adapter's `detach` operation restores
-the original profile settings without removing the router. Full router
-uninstallation also detaches Codex and the terminal client.
+the original profile settings when the receipt proves each current value.
+A sealed gateway value cannot meet that restoration check. Detach then leaves
+the settings and receipt untouched. Full removal also stops before detaching
+any assistant or uninstalling services. A ready connection does not mean
+removal is safe; sealed-setting removal needs a separately verified repair.
+When restoration is proven, full removal also detaches Codex and the terminal client.
 
 Task sharing preserves `sessionId` and `cliSessionId`, keeps workspace paths
 outside the profiles unchanged, and retains tasks that exist in only one
@@ -500,9 +510,9 @@ Some desktop versions will hide non-Claude rows; earlier compatibility
 measurements do not verify this candidate. Attach with
 `packaging/install.py --desktop`. Without a Claude subscription
 (`claude_mode` `none`), the menu disables **Claude subscription** and the switch
-refuses to move there; service-only install and uninstall detach again. The first-party
-profile's credentials are never touched, so native sign-in survives, and
-a detach returns the app to first-party mode.
+refuses to move there. Service-only install and uninstall use the strict detach
+checks above. The first-party profile's credentials are never touched, so native
+sign-in survives. A successful detach returns the app to first-party mode.
 
 Coexistence limit: third-party mode replaces the whole picker with
 gateway rows. Native subscription models are not in it, and the profile

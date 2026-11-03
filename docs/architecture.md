@@ -670,6 +670,15 @@ path (`AGENTS.md` section 3).
 `packaging/claude_desktop_config.py` owns desktop attachment and its original
 restore snapshot. A matching owned attachment keeps the user's selected
 subscription or gateway mode on subsequent setup and update runs.
+Its shared `operational_snapshot` validator accepts a supported opaque sealed
+API field only for an existing receipt-bound route. It requires a complete
+typed restore snapshot, the exact written map, applied entry, provider,
+credential kind and full loopback URL. Duplicate JSON keys, changed routes,
+bootstrap settings and invalid modes refuse. Repeated opaque attachment keeps
+the entry and receipt bytes unchanged. Classification and every switch recheck
+use this proof; it proves routing ownership, never decrypted plaintext.
+`client_removal.json_plan` and `owned_json` retain strict restoration checks.
+An opaque value therefore still blocks detach and all-client removal preflight.
 `desktop_windows.py` resolves the current user's registered Claude Store
 package and its virtualized roaming profile; the gateway profile stays separate.
 `windows_native.py` binds package, process, token and window APIs with explicit
@@ -690,8 +699,9 @@ it shares the current account's local tasks and changes the mode only when all
 required copies succeed. Open and Switch share one transition lock, held before
 reading the mode through reopening, so overlapping requests cannot use a stale
 source profile. The switch rechecks the attachment, managed policy and stopped
-app before changing the mode. When setup recorded no Claude subscription, it
-refuses a move to the subscription before asking or closing Claude, and the
+app before changing the mode. The mode write also compares the exact settings
+bytes to preserve concurrent edits. When setup recorded no Claude subscription,
+it refuses a move to the subscription before asking or closing Claude, and the
 menu disables that choice. Open Claude leaves histories alone. The stable
 `claude_profile_launch.py` follows the installed release pointer so both actions
 survive updates and release pruning. After a rollback to a release without task
