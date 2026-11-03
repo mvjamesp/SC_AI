@@ -66,7 +66,7 @@ def attached_profile(home):
         entry = _desktop.read_entry(path)
         if any(entry.get(key) != value
                for key, value in _desktop.desired_values(state).items()):
-            raise ValueError('gateway was changed')
+            _desktop.operational_snapshot(home, state, receipt, _receipts)
         if entry.get('bootstrapUrl'):
             raise ValueError('managed setup')
         doc, _ = _desktop.read_desktop_config(profile)
@@ -279,6 +279,7 @@ def _share_and_select(home, config, current_mode, mode, *, run, policy_check, sy
     except Exception as exc:
         raise SwitchError('Claude tasks were not fully shared. Try again.') from exc
     # Re-read after sync as well: preserve unrelated edits and refuse a new selection.
+    before = config.read_bytes() if config.exists() else None
     latest_config, current = attached_profile(home)
     if latest_config != config or current['deploymentMode'] != current_mode:
         raise SwitchError('Claude settings changed. Open Claude and try again.')
@@ -291,7 +292,7 @@ def _share_and_select(home, config, current_mode, mode, *, run, policy_check, sy
         raise SwitchError('Claude settings or status could not be checked. Try again.') from exc
     current['deploymentMode'] = mode
     try:
-        _desktop.write_json(config, current)
+        _desktop.write_json(config, current, expected=before)
     except OSError as exc:
         raise SwitchError('Claude settings could not be saved. Try again.') from exc
     unshared = report.get('unshared', 0)
