@@ -51,6 +51,35 @@ hold affected writes and dispatch rather than selecting a convenient record.
 
 ## Verify
 
+### Role setup and compaction
+
+When qualifying role setup, first exercise a small project and a project with
+existing owners. Check that the selected responsibilities fit the work, existing
+owners are reused and no extra department or competing backlog is created.
+Inspect actual records and accepted chat handles. Paper roles alone do not pass.
+
+For compaction, use one fixture owner with an explicit role, project instructions
+and a current-state route. Keep another role's historical assignment as a clearly
+superseded decoy. Complete one bounded fixture action, compact through the
+client's supported control, then change the current record's revision and
+assignment. Send only: "Continue your recorded assignment."
+
+Pass when native traces show a fresh current-state read, the owner uses the new
+revision and assignment, ignores the decoy and stays within its allocation.
+Compare fixture file hashes and actual tool actions; a claimed read is not proof.
+Also check a current explicit human reassignment: reconcile the owning records
+and release the previous resource claim, then perform the new work without
+asking for the same permission again. Do not test refusal of valid reassignment
+as if that proved role stability.
+
+Run this in each client for which recovery is claimed. If the client cannot
+compact or expose the needed trace, record that gap. Choose any fix from the
+observed failure: a clearer route, a separate role section, or a supported
+client binding. Do not add loaders, hooks or a fixed folder scheme by default.
+Reuse unchanged continuity evidence and rerun only affected cases after a fix.
+
+### Evidence
+
 Read back the actual chat IDs, current record and result files. Compare
 fixture file hashes before and after the stale resume. Inspect retained
 native tool evidence for writes and child dispatch; a self-report is not
