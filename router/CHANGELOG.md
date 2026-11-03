@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.38
+
 - Keep an existing Claude desktop connection ready when Claude seals its saved
   gateway placeholder. Preserve the entry and receipt during repeated setup,
   and retain all switching guards. Sealed settings still refuse detach and
