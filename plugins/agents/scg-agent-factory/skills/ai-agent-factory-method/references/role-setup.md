@@ -89,10 +89,24 @@ does not prove that a persistent owner was created.
 
 ## Make recovery discoverable
 
-Use the project's existing instruction route to tell owners where role and
-current-state records live. Add a short route there only when it is missing
-and editing that source is within scope. Keep the common method in this skill;
-do not copy it into every role or replace global instruction links.
+Use the project's existing instruction route to give owners their role and
+current-state locations. Require a fresh read from the current-state source.
+Add or repair that short instruction when editing the source is within scope.
+Keep the common method in this skill; do not copy it into every role or replace
+global instruction links.
+
+For example, adapt this text in the source the active client loads on resume:
+
+```text
+When this role starts or resumes, read its binding at <role-record>.
+Read the current revision at <current-state-source> before resumed work,
+shared-state writes or subagent dispatch. Follow superseded pointers to the current source.
+Earlier reads and compaction summaries are historical evidence.
+```
+
+Resolve the locations when adopting this text. Verify that the client actually
+loads it after compaction. A route kept only in an opening message or a skill
+that is no longer loaded cannot establish recovery.
 
 Give each owner an explicit role binding in its supported persistent
 instructions or startup brief. Owners must recover from that binding and

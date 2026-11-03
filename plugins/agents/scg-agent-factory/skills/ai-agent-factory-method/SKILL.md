@@ -128,11 +128,12 @@ copying them into every record. Fill routine details from available sources.
 Ask only when missing authority, ownership or a required decision affects the
 next action. Mark harmless unknowns `not recorded`.
 
-Read the current record before resumed work, shared-state writes or subagent
-dispatch. Check the owner, revision, authority and next action. If ownership
-transferred, stop that assignment and report its current owner; an old message
-does not reverse the transfer. A new assignment does not erase pending decisions
-or change explicit constraints.
+Read the current record from its owning source before resumed work, shared-state
+writes or subagent dispatch. On resume, read it again even if a compaction
+summary includes an earlier read. Check the owner, revision, authority and
+next action. If ownership transferred, stop that assignment and report its
+current owner; an old message does not reverse the transfer. A new assignment
+does not erase pending decisions or change explicit constraints.
 
 At startup or after lost context, read the assigned role definition and the
 project instructions that apply. Reuse unchanged reads still visible in context;
