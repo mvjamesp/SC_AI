@@ -80,6 +80,25 @@ keep routine coordination between owners. Work in parallel on independent
 resources. Choose workers that can meet the task and checks, then prefer
 the lowest-cost suitable option within the user's model and access choices.
 
+In Codex and Claude Code, only the project manager asks the human questions
+for the Factory team. This includes Codex `request_user_input` and
+`request_user_input_async`, and Claude Code `AskUserQuestion`. Other owners
+and temporary subagents do not ask the human from their chats. Send the manager
+the question, relevant context, options and affected action through an available
+owner channel or the shared current record. Signal the manager when possible.
+Hold the dependent action and continue independent authorised work. The manager
+uses existing decisions where they apply, or asks the human, records the answer
+and returns it to the owner. If the manager cannot be reached, record the
+request and delivery limit; do not treat an undelivered request as approval.
+Required host permission prompts, safety escalation and explicit human
+instructions still apply.
+
+Give this routing rule to each owner through instructions or a startup brief
+the client actually loads. Include it in temporary subagent assignments. Reuse
+existing owner chats and verify the route on setup and resume. When the project
+manager resumes an owner after compaction, name the canonical current-state
+source in the handoff and require a fresh read before work.
+
 Resolve the durable project from its existing instructions, backlog and human
 owner. New outcomes reuse that project's team and state. If the boundary is
 unclear, resolve it before creating permanent roles.
@@ -125,8 +144,9 @@ Next:      <next safe action; parked decisions and their owners>
 
 Link canonical evidence, recovery procedures and retention rules instead of
 copying them into every record. Fill routine details from available sources.
-Ask only when missing authority, ownership or a required decision affects the
-next action. Mark harmless unknowns `not recorded`.
+Route missing authority, ownership or a required decision to the manager when
+it affects the next action. The manager asks only when a human answer is needed.
+Mark harmless unknowns `not recorded`.
 
 Read the current record from its owning source before resumed work, shared-state
 writes or subagent dispatch. On resume, read it again even if a compaction
@@ -213,8 +233,8 @@ with evidence and triage;
 `propose` adds a proposal and verification plan. Neither permits implementation.
 `implement-in-test` permits agreed test changes and stops at the release gate.
 `release via approved path` permits only already authorised release actions.
-If authority is genuinely unclear, continue useful read-only work and ask only
-about the action that needs a decision.
+If authority is genuinely unclear, continue useful read-only work and route
+the affected action to the manager for the necessary decision.
 
 Before a repeatable write loop reaches a live system, exercise recovery in
 test and verify the required behaviour returns. Before a destructive or
