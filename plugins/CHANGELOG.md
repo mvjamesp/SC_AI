@@ -1,5 +1,12 @@
 # Changelog
 
+## scg-optimise-ci 0.1.14 (2026-11-04)
+
+- Prove split jobs preserve the complete verification plan and execution counts.
+  Check per-job tools and inherited selection variables in nested checks.
+- Require valid, matching report fingerprints and actual job results. Validate
+  partial reruns without accepting stale success or missing execution evidence.
+
 ## scg-agent-factory 0.4.0 (2026-11-03)
 
 - Start from the project's instructions, existing owners and current work.
