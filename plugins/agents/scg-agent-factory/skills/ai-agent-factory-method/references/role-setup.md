@@ -87,6 +87,11 @@ when one exists. If the host cannot create or resume a persistent owner, report
 the actual limitation and proposed setup. A saved file or temporary helper
 does not prove that a persistent owner was created.
 
+For Codex and Claude Code, give every owner the Factory method's human-question
+routing rule in instructions or a startup brief the client loads. Include the
+rule in temporary subagent assignments. Reuse existing chats; do not assume a
+changed skill has updated their saved instructions or active context.
+
 ## Make recovery discoverable
 
 Use the project's existing instruction route to give owners their role and
@@ -99,6 +104,7 @@ For example, adapt this text in the source the active client loads on resume:
 
 ```text
 When this role starts or resumes, read its binding at <role-record>.
+Read <factory-method> and follow its human-question routing rule.
 Read the current revision at <current-state-source> before resumed work,
 shared-state writes or subagent dispatch. Follow superseded pointers to the current source.
 Earlier reads and compaction summaries are historical evidence.
@@ -107,6 +113,17 @@ Earlier reads and compaction summaries are historical evidence.
 Resolve the locations when adopting this text. Verify that the client actually
 loads it after compaction. A route kept only in an opening message or a skill
 that is no longer loaded cannot establish recovery.
+
+When the project manager resumes an owner after compaction, name the current
+state source and require a fresh read in the handoff:
+
+```text
+Read <current-state-source> from its canonical source now, then continue your recorded assignment.
+```
+
+Resolve the placeholder to the owner's actual current-state source. Keep the
+same owner chat and existing authority. A passing handoff does not prove that a
+generic continuation without the source will recover correctly.
 
 Give each owner an explicit role binding in its supported persistent
 instructions or startup brief. Owners must recover from that binding and
@@ -122,8 +139,9 @@ compaction behaviour in Codex and Claude Code.
 ## Verify the setup
 
 Check the actual owner identities, selected duties, instruction routes and
-current-state pointers. Complete one bounded useful assignment. Confirm that
-the owner reads the current record and acts only within its allocation.
+current-state pointers. Check that the client loads the question-routing rule.
+Complete one bounded useful assignment. Confirm that the owner reads the
+current record and acts only within its allocation.
 Keep actual installation, fresh discovery, role loading and human acceptance
 as separate evidence.
 

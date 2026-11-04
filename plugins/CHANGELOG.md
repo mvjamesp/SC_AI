@@ -1,5 +1,13 @@
 # Changelog
 
+## scg-agent-factory 0.4.1 (2026-11-05)
+
+- Route human questions from Factory owners and helpers through the project
+  manager in Codex and Claude Code. Keep required permissions and safety
+  escalation intact, and continue independent work while an answer is pending.
+- Carry the rule into owner instructions. On resume after compaction, have the
+  manager name the current-state source and require a fresh read.
+
 ## scg-optimise-ci 0.1.14 (2026-11-04)
 
 - Prove split jobs preserve the complete verification plan and execution counts.
