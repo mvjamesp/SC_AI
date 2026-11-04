@@ -87,6 +87,13 @@ Preserve fixture groups, ordering requirements and duplicate test executions.
 Account for extra setup, artifact transfers and work performed before another check fails.
 Splitting jobs changes timeout and retry boundaries; verify that required work can still complete.
 
+When splitting a verification plan, compare resolved command and suite identities
+across jobs with the unsplit plan. Preserve execution counts, including intentional
+duplicates; identify shared prerequisites that each fresh runner must repeat.
+Provision each job's tools from its selected suites, including targeted plans.
+Check child-process environment inheritance: a job-selection variable must not
+silently narrow a nested full check or prevent its intended execution.
+
 Preserve required check names, event filters, path scope, branch rules and matrix coverage.
 Check the provider's actual semantics for failed, cancelled, timed-out and skipped prerequisites.
 An intentionally skipped job and missing required evidence need different treatment.
@@ -94,6 +101,15 @@ The final gate must require every applicable result and block incomplete or fail
 Diagnostic overrides and metadata-only events must not create passing acceptance evidence.
 Establish acceptance authority from trusted provider events, check identity and permissions.
 A report flag alone cannot establish that authority.
+
+If the final gate combines reports, require every applicable job's actual status
+and reports bound to the same candidate and verification plan. Validate required
+fingerprints before comparing them; matching missing or malformed values must fail.
+Distinguish a planned job with no work from missing execution evidence.
+For partial reruns, select the latest applicable attempt for each job using trusted
+run and attempt identity. Retain earlier reports without allowing stale success
+to hide a failed, cancelled or incomplete replacement. Test these paths alongside
+diagnostic events and job-specific tool setup before claiming retry support.
 
 Validate the affected event and result paths, including failures and cancellation.
 For local process orchestration, exercise real child processes in relevant completion orders,
