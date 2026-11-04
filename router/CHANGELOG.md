@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.3.39
+
+- Deliver Factory 0.4.1 so team questions return to the project manager.
+- Include CI Optimisation 0.1.14 with the current approved plugin bundle.
+
 ## 1.3.38
 
 - Keep an existing Claude desktop connection ready when Claude seals its saved
