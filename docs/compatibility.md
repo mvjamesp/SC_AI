@@ -1,5 +1,47 @@
 # Compatibility
 
+## Router 1.3.39 current-client checks, 5 November 2026 AEDT
+
+Clients: Codex desktop `26.1027.61615` (build `24141`), its bundled CLI
+`0.166.0-alpha.5.1`, and Claude Code `2.1.318`. The shell's older Codex CLI
+was not used. Four synthetic route checks passed against the frozen Router
+implementation from `47f205562ec1ef04b30e1395495df439f85ebbe0`.
+
+| Client and route | Requested model and effort | Counted successful work | Result |
+| --- | --- | --- | --- |
+| Codex / OpenRouter | `deepseek/deepseek-v4.1-flash-1017`, Low | Two upstream requests, one tool call | Tool result and final marker passed |
+| Codex / ChatGPT subscription | `gpt-6-luna`, Low | Two upstream requests, one tool call | Tool result and final marker passed |
+| Claude Code / OpenRouter | `anthropic/claude-haiku-5.5`, Low | Three upstream requests, two sequential Reads | Paired results and final markers passed |
+| Claude Code / Claude subscription | `claude-sonnet-5-5`, Low | Two upstream requests, one Read | Paired result and final marker passed |
+
+Both Codex checks used `tools/probe_codex_runtime.py`. The Claude external
+check used the existing Claude probe; the subscription check used the real
+client in restricted safe mode. Disposable listeners ran the frozen candidate
+with the installed credential reader and existing native sign-in. No credential
+was copied, and client settings and running desktop apps were preserved.
+
+Each leg capped actual upstream attempts at eight, prepared input at 512 KiB,
+and output at 2,048 tokens per request, with a 180-second send deadline.
+A 16,000-token reported-usage stop allows one bounded in-flight request to
+finish; the Codex subscription leg therefore reported 25,700 tokens across
+its two requests. Claude also had client budgets of USD 0.25 for the external
+leg and USD 0.20 for the subscription leg. No automatic model-send retry
+followed an upstream rejection.
+
+The retained record includes a zero-call rejected nested home, a zero-call
+workspace-discovery failure, and one HTTP 400 caused during fixture setup.
+Corrections moved the synthetic home outside the live home, permitted local
+DNS socket access for native workspace discovery, and used the Responses
+output-cap field rather than the Messages field. There were ten actual
+upstream attempts overall: nine successful responses and that one rejection.
+The successful responses reported 50,832 tokens; the rejection reported no usage.
+
+All four routes reported their requested model. Both Codex routes also reported
+Low effort. Served effort was not exposed on the two Claude routes. Provider
+reports do not independently attest model weights or reasoning compute.
+Publication, installed delivery, fresh-session plugin adoption and fleet uptake
+remain separate gates; no installation was performed by these checks.
+
 ## Router 1.3.38 sealed-setting source checks, 3 November 2026 AEDT
 
 Claude desktop `4.4212.0` seals the saved gateway API field on startup.
