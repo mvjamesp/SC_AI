@@ -56,8 +56,27 @@ The 2,822-test core suite passed before this narrow correction, with 11 skips.
 The 118 affected tests then passed on the final runtime, including the carried
 effort regression, every model's protocol conformance and fixed-model refusal.
 
-The OpenRouter checks do not replace subscription-route checks required
-before publication after the Codex upgrade.
+The release checks also exercised the current subscription routes through
+isolated listeners, using the existing client sign-in without copying credentials.
+Codex `gpt-6-luna` at Low completed its tool round trip in two upstream
+requests. Both responses reported that model and Low effort.
+
+Each subscription leg allows eight attempts, 512 KiB prepared input and
+2,048 output tokens per request, with a 180-second deadline. A 16,000-token
+reported-usage stop permits one bounded in-flight request to finish; the Codex
+leg reported 26,117 tokens across its two requests. Claude also has a
+USD 0.20 client budget. No automatic send retry follows an upstream rejection.
+
+The first Claude subscription check returned HTTP 401 in one upstream request,
+with no model reply or reported usage. That failed check is retained.
+After the owner renewed the existing sign-in, `claude-sonnet-5-5` at Low
+completed one Read with its paired result and final marker in two upstream
+requests. Both responses reported that model; served effort was not exposed.
+The successful Claude leg reported 7,881 tokens. The failed invocation was
+not automatically retried. No installed settings or default models changed,
+and both desktop applications remained open. These current subscription checks
+and the unchanged OpenRouter checks satisfy the client-upgrade compatibility
+gate. Publication, installed delivery and fleet uptake remain separate.
 
 ## Router 1.3.39 current-client checks, 5 November 2026 AEDT
 
