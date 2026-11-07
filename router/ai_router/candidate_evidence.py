@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from . import registry, request_evidence
+from . import auto_routing, registry, request_evidence
 from .clients.registry import CLIENTS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,11 +147,14 @@ def problems(row, record, *, runtime=None, clients=None):
             if (route['client'] != expected[route['protocol']]
                     or not re.fullmatch(r'\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.]+)?', route['client_version'])
                     or (clients is not None and route['client_version'] != clients.get(route['client']))
-                    or route['requested_effort'] not in row.reasoning
+                    or (not auto_routing.is_auto(row.upstream_id or row.slug)
+                        and route['requested_effort'] not in row.reasoning)
                     or route['result'] != 'pass' or route['conformance'] != 'pass'
                     or route['calls'] < 1
-                    or any(r['value'] != (row.upstream_id or row.slug) for r in route['served_models'])
-                    or any(r['value'] != route['requested_effort'] for r in route['served_efforts'])):
+                    or any(not auto_routing.accepts_model(row.upstream_id or row.slug, r['value'])
+                           for r in route['served_models'])
+                    or (not auto_routing.is_auto(row.upstream_id or row.slug) and any(
+                        r['value'] != route['requested_effort'] for r in route['served_efforts']))):
                 failures.append(route['protocol'] + ': failed, stale or mismatched evidence')
         return failures
     except (ValueError, TypeError, KeyError, OSError):

@@ -3,7 +3,7 @@ import re
 import time
 from dataclasses import replace
 from functools import partial
-from . import outcome
+from . import auto_routing, outcome
 
 EFFORTS = frozenset(('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'))
 RESPONSE_EVENTS = frozenset(('response.created', 'response.in_progress',
@@ -116,6 +116,9 @@ class Attempt(dict):
         if field in ('model', 'effort'):
             values = {report['value'] for report in reports}
             expected = self['upstream_model' if field == 'model' else 'requested_effort']
+            if auto_routing.is_auto(self['upstream_model']):
+                self[field + '_status'] = 'provider_reported_selection'
+                return
             self[field + '_status'] = ('contradictory' if len(values) > 1 else
                 'unverified' if expected is None else
                 'provider_reported_match' if value == expected else 'mismatch')

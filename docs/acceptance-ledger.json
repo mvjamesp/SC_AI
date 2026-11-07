@@ -3094,5 +3094,201 @@
         "result": "pass"
       }
     ]
+  },
+  {
+    "kind": "model_routes_v1",
+    "observed_at": "2026-11-07T04:43:09.603883+00:00",
+    "model": "openrouter/auto-code",
+    "provider": "openrouter",
+    "capability_fingerprint": "43152c7d85eb206b74e36ee5b345bc583bb9446fc518bedced289528cc7bd361",
+    "runtime_fingerprint": "e9d526f5e5151d64e7845435ada39bff2d62c3fd40b6ae10deacf5103e40686c",
+    "router_version": "1.3.40",
+    "router_revision": "389ed53a4a887a04ca1e1170312e97b420d0d60c",
+    "routes": [
+      {
+        "protocol": "responses",
+        "client": "codex",
+        "client_version": "0.166.0-alpha.6",
+        "requested_effort": "none",
+        "served_models": [],
+        "served_efforts": [],
+        "calls": 1,
+        "result": "fail",
+        "conformance": "pass"
+      },
+      {
+        "protocol": "messages",
+        "client": "claude",
+        "client_version": "2.1.318",
+        "requested_effort": "none",
+        "served_models": [],
+        "served_efforts": [],
+        "calls": 6,
+        "result": "fail",
+        "conformance": "pass"
+      }
+    ]
+  },
+  {
+    "kind": "model_routes_v1",
+    "observed_at": "2026-11-07T05:06:35.711187+00:00",
+    "model": "openrouter/auto-code",
+    "provider": "openrouter",
+    "capability_fingerprint": "43152c7d85eb206b74e36ee5b345bc583bb9446fc518bedced289528cc7bd361",
+    "runtime_fingerprint": "174018ef9123c1160374770fe17bca80cc7e4049fb14fff502e97f4241158c2d",
+    "router_version": "1.3.40",
+    "router_revision": "389ed53a4a887a04ca1e1170312e97b420d0d60c",
+    "routes": [
+      {
+        "protocol": "responses",
+        "client": "codex",
+        "client_version": "0.166.0-alpha.6",
+        "requested_effort": "low",
+        "served_models": [
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "response.created.response.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "response.in_progress.response.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "response.completed.response.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "response.created.response.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "response.in_progress.response.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "response.completed.response.model"
+          }
+        ],
+        "served_efforts": [
+          {
+            "value": "medium",
+            "source": "response.completed.response.reasoning.effort"
+          },
+          {
+            "value": "medium",
+            "source": "response.completed.response.reasoning.effort"
+          }
+        ],
+        "calls": 2,
+        "result": "pass",
+        "conformance": "pass"
+      },
+      {
+        "protocol": "messages",
+        "client": "claude",
+        "client_version": "2.1.318",
+        "requested_effort": "none",
+        "served_models": [
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "message_start.message.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "message_start.message.model"
+          },
+          {
+            "value": "openai/gpt-6.1-sol",
+            "source": "message_start.message.model"
+          }
+        ],
+        "served_efforts": [],
+        "calls": 3,
+        "result": "pass",
+        "conformance": "pass"
+      }
+    ]
+  },
+  {
+    "kind": "model_routes_v1",
+    "observed_at": "2026-11-07T05:06:50.135762+00:00",
+    "model": "openrouter/auto",
+    "provider": "openrouter",
+    "capability_fingerprint": "1287877e265c064c0ccf518f492bc6f14f0ea4187af4996319a4857d790f1675",
+    "runtime_fingerprint": "174018ef9123c1160374770fe17bca80cc7e4049fb14fff502e97f4241158c2d",
+    "router_version": "1.3.40",
+    "router_revision": "389ed53a4a887a04ca1e1170312e97b420d0d60c",
+    "routes": [
+      {
+        "protocol": "responses",
+        "client": "codex",
+        "client_version": "0.166.0-alpha.6",
+        "requested_effort": "low",
+        "served_models": [
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "response.created.response.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "response.in_progress.response.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "response.completed.response.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "response.created.response.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "response.in_progress.response.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "response.completed.response.model"
+          }
+        ],
+        "served_efforts": [
+          {
+            "value": "low",
+            "source": "response.completed.response.reasoning.effort"
+          },
+          {
+            "value": "low",
+            "source": "response.completed.response.reasoning.effort"
+          }
+        ],
+        "calls": 2,
+        "result": "pass",
+        "conformance": "pass"
+      },
+      {
+        "protocol": "messages",
+        "client": "claude",
+        "client_version": "2.1.318",
+        "requested_effort": "none",
+        "served_models": [
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "message_start.message.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "message_start.message.model"
+          },
+          {
+            "value": "deepseek/deepseek-v4.1-flash-1017",
+            "source": "message_start.message.model"
+          }
+        ],
+        "served_efforts": [],
+        "calls": 3,
+        "result": "pass",
+        "conformance": "pass"
+      }
+    ]
   }
 ]

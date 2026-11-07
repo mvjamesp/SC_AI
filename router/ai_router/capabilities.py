@@ -10,7 +10,7 @@ advertising it; Grok has no max/minimal. Defaults stay low.
 `EXTERNAL_MODELS` is every slug routed to an external provider's own key,
 whatever that provider is; upstream facts live in provider_defs.py.
 """
-from . import provider_defs
+from . import auto_routing, provider_defs
 from .registry import MODELS, external_slugs
 EXTERNAL_MODELS = frozenset()
 IMAGE_INPUT_MODELS = frozenset()
@@ -76,7 +76,8 @@ def checked_level_entries(slug, advertised, default):
     kept = [lv for lv in CANONICAL_ORDER if lv in live_levels(slug, advertised)]
     if not kept or default not in kept:
         raise ValueError('Unsupported reasoning levels for ' + slug)
-    return [{'effort': level, 'description': describe(level)} for level in kept]
+    return [{'effort': level, 'description': ('Automatic model and reasoning selection'
+            if auto_routing.is_auto(slug) else describe(level))} for level in kept]
 
 def check_effort(slug, effort):
     """Fail closed when a routed model is asked for an unsupported effort.
