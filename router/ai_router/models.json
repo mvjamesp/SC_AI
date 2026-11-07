@@ -821,6 +821,62 @@
     ]
   },
   {
+    "slug": "openrouter/auto-code",
+    "provider": "openrouter",
+    "upstream_id": "",
+    "display_name": "OpenRouter: Auto Code · OpenRouter",
+    "vendor": "OpenRouter",
+    "reasoning": [
+      "none"
+    ],
+    "default_reasoning": "none",
+    "modalities": [
+      "text"
+    ],
+    "excluded_efforts": [],
+    "schema_mode": "native",
+    "history_mode": "native",
+    "max_tools": null,
+    "drop_images": false,
+    "context_window": 2000000,
+    "max_output_tokens": 65536,
+    "reasoning_summary": "none",
+    "apply_patch": "none",
+    "experimental_tools": [],
+    "web_search": false,
+    "tier": "verified",
+    "listed": true,
+    "priority": 126
+  },
+  {
+    "slug": "openrouter/auto",
+    "provider": "openrouter",
+    "upstream_id": "",
+    "display_name": "OpenRouter: Auto Router · OpenRouter",
+    "vendor": "OpenRouter",
+    "reasoning": [
+      "none"
+    ],
+    "default_reasoning": "none",
+    "modalities": [
+      "text"
+    ],
+    "excluded_efforts": [],
+    "schema_mode": "native",
+    "history_mode": "native",
+    "max_tools": null,
+    "drop_images": false,
+    "context_window": 2000000,
+    "max_output_tokens": 32768,
+    "reasoning_summary": "none",
+    "apply_patch": "none",
+    "experimental_tools": [],
+    "web_search": false,
+    "tier": "verified",
+    "listed": true,
+    "priority": 127
+  },
+  {
     "slug": "qwen/qwen3.8-max-0902",
     "provider": "openrouter",
     "display_name": "Qwen: Qwen3.8 Max (0902) · OpenRouter",
@@ -843,7 +899,7 @@
     "max_tools": null,
     "drop_images": false,
     "context_window": 1000000,
-    "priority": 126,
+    "priority": 128,
     "max_output_tokens": 131072,
     "reasoning_summary": "none",
     "apply_patch": "none",
@@ -873,7 +929,7 @@
     "max_tools": 350,
     "drop_images": true,
     "context_window": 500000,
-    "priority": 127,
+    "priority": 129,
     "max_output_tokens": 450000,
     "reasoning_summary": "none",
     "apply_patch": "none",
@@ -910,7 +966,7 @@
     "web_search": false,
     "tier": "verified",
     "listed": true,
-    "priority": 128
+    "priority": 130
   },
   {
     "slug": "xiaomi/mimo-v2.6-flash",
@@ -937,7 +993,7 @@
     "max_tools": null,
     "drop_images": false,
     "context_window": 1048576,
-    "priority": 129,
+    "priority": 131,
     "max_output_tokens": 131072,
     "reasoning_summary": "none",
     "apply_patch": "none",
@@ -971,7 +1027,7 @@
     "drop_images": false,
     "context_window": 1048576,
     "auto_compact_token_limit": 400000,
-    "priority": 130,
+    "priority": 132,
     "max_output_tokens": 131072,
     "reasoning_summary": "none",
     "apply_patch": "none",
@@ -1000,7 +1056,7 @@
     "max_tools": 128,
     "drop_images": false,
     "context_window": 1310720,
-    "priority": 131,
+    "priority": 133,
     "max_output_tokens": 131072,
     "reasoning_summary": "none",
     "apply_patch": "freeform",
@@ -1028,7 +1084,7 @@
     "max_tools": 128,
     "drop_images": false,
     "context_window": 1310720,
-    "priority": 132,
+    "priority": 134,
     "max_output_tokens": 943718,
     "reasoning_summary": "none",
     "apply_patch": "freeform",

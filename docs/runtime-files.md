@@ -30,7 +30,7 @@ are never copied between machines.
 `ai_router/external_history.py`,
 `ai_router/standalone_outputs.py`, `ai_router/discovered.py`,
 `ai_router/errors.py`, `ai_router/redaction.py`, `ai_router/candidate.py`,
-`ai_router/candidate_evidence.py`,
+`ai_router/candidate_evidence.py`, `ai_router/auto_routing.py`,
 `ai_router/setup.py`, `ai_router/setup_page.py`, `ai_router/key_store.py`,
 `ai_router/key_dialog.py`, `ai_router/key_prompt.py`, `ai_router/work_account.py`,
 `ai_router/runtime.py`,

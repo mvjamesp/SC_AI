@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest import mock
 
-from ai_router import (catalogue, outcome, provider_defs, registry, subscription_discovery,
+from ai_router import (auto_routing, catalogue, outcome, provider_defs, registry, subscription_discovery,
                        wire_shape)
 from ai_router import media as media_api
 from tests.fakes import FakeUpstream
@@ -16,7 +16,6 @@ from tests.model_route_fixtures import (HEADERS, PROTOCOLS, RouteHarness,
 class ModelRouteConformanceTests(unittest.TestCase):
     def setUp(self):
         self.harness = RouteHarness(self)
-
     def test_media_streams_complete_on_documented_success_statuses(self):
         for kind, model, code in (('video', 'google/veo-3.1-fast', 202),):
             with self.subTest(kind=kind):
@@ -35,7 +34,6 @@ class ModelRouteConformanceTests(unittest.TestCase):
                                  'message')
                 self.assertEqual(len(sends), 1)
                 self.assertEqual(facts['outcome'], outcome.SUCCESS)
-
     def test_selected_media_row_accepts_a_normal_codex_turn(self):
         model = 'google/veo-3.1-fast'
         body = media_payload(model, 'video', stream=True)
@@ -46,7 +44,6 @@ class ModelRouteConformanceTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(sends), 1)
         self.assertIn(b'job_fixture', wire)
-
     def test_image_rows_on_responses_are_refused_before_a_paid_send(self):
         for row in registry.MODELS:
             if row.media_kind == 'image':
@@ -142,7 +139,8 @@ class ModelRouteConformanceTests(unittest.TestCase):
                     attempt, = facts['attempt_evidence']
                     self.assertEqual(attempt['requested_model'], row.slug)
                     self.assertEqual(attempt['upstream_model'], upstream_id)
-                    self.assertEqual(attempt['model_status'], 'provider_reported_match')
+                    self.assertEqual(attempt['model_status'], 'provider_reported_selection'
+                                     if auto_routing.is_auto(row.slug) else 'provider_reported_match')
                     observed.add((row.slug, row.provider, protocol))
         self.assertTrue(observed)
         self.assertEqual(observed, expected)
@@ -161,7 +159,9 @@ class ModelRouteConformanceTests(unittest.TestCase):
                     self.assertEqual(facts['outcome'], outcome.TRANSIENT if committed else outcome.SUCCESS)
                     self.assertEqual(len(facts['attempt_evidence']), len(sends))
                     self.assertEqual(facts['attempt_evidence'][0]['outcome'], outcome.TRANSIENT)
-                    self.assertTrue(all(a['model_status'] == 'provider_reported_match'
+                    expected_status = ('provider_reported_selection' if auto_routing.is_auto(row.slug)
+                                       else 'provider_reported_match')
+                    self.assertTrue(all(a['model_status'] == expected_status
                                         for a in facts['attempt_evidence']))
 
     def test_http_failures_keep_their_category_and_do_not_attest_a_cached_model(self):
@@ -233,7 +233,10 @@ class ModelRouteConformanceTests(unittest.TestCase):
                     self.assertLessEqual(sent['max_output_tokens'], row.max_output_tokens)
                     if row.context_window:
                         self.assertLessEqual(sent['max_output_tokens'], row.context_window // 2)
-                    self.assertEqual(sent['reasoning']['effort'], row.default_reasoning)
+                    if auto_routing.is_auto(row.slug):
+                        self.assertNotIn('reasoning', sent)
+                    else:
+                        self.assertEqual(sent['reasoning']['effort'], row.default_reasoning)
                 else:
                     self.assertEqual(sent, {**body, 'model': row.upstream_id or row.slug})
                     self.assertNotIn('max_output_tokens', sent)

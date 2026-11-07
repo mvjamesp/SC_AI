@@ -7,7 +7,7 @@ import time
 from dataclasses import replace
 from compression import zstd
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from . import (client_close, errors, ingress, local_services, model_prompt_page,
+from . import (auto_routing, client_close, errors, ingress, local_services, model_prompt_page,
                media_origin, provider_defs, relay, setup, subscription_recovery,
                subscription_fallback, transport, turn_budget, request_evidence, request_lease)
 from .credentials import Credentials
@@ -240,6 +240,7 @@ class Handler(BaseHTTPRequestHandler):
                 except (OSError, http.client.HTTPException):
                     return self.error(errors.compaction_unavailable())
             try:
+                payload = auto_routing.restrict(payload, context, self.server.state.get('allowed_models'))
                 prepared = subscription_fallback.prepare(provider, model, path, payload,
                                                          raw, dict(self.headers), self.server,
                                                          decoded_len=decoded_len, context=context)

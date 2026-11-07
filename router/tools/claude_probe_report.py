@@ -1,6 +1,7 @@
 """Content-free tool and identity facts from a synthetic Claude probe stream."""
 import json
 from pathlib import Path
+from ai_router import auto_routing
 
 STUB_TOOL = 'mcp__stubtools__tool_000'
 
@@ -9,6 +10,9 @@ def identity(expected_model, report):
     served = report.get('served') or []
     if not served:
         return 'unverified'
+    if auto_routing.is_auto(expected_model) and all(
+            auto_routing.accepts_model(expected_model, item) for item in served):
+        return 'routed'
     return 'matched' if all(item == expected_model for item in served) else 'mismatched'
 
 

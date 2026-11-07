@@ -12,9 +12,9 @@ encoding and the turn-size fit.
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import (agent_handoffs, claude_compat, context_recovery, external_history, history_items, provider_defs,
+from . import (agent_handoffs, auto_routing, claude_compat, context_recovery, external_history, history_items, provider_defs,
                subscription_history, tool_runs)
-from .capabilities import check_row_effort
+from .capabilities import CANONICAL_ORDER, check_row_effort
 from .errors import PreparationError
 from .image_items import note_images
 from .registry import upstream_id_for
@@ -116,7 +116,9 @@ def note_media(payload, p):
 
 def check_effort(payload, p):
     reasoning = payload.get('reasoning')
-    check_row_effort(p.row, reasoning.get('effort') if isinstance(reasoning, dict) else None)
+    effort = reasoning.get('effort') if isinstance(reasoning, dict) else None
+    if not auto_routing.is_auto(getattr(p.row, 'slug', None)) or effort not in CANONICAL_ORDER:
+        check_row_effort(p.row, effort)
     return payload
 
 
@@ -143,7 +145,7 @@ def upstream_model(payload, p):
     payload = {**payload, 'model': upstream_id_for(p.row)}
     if getattr(p.row, 'provider_prefs', None):
         payload['provider'] = dict(p.row.provider_prefs)
-    return payload
+    return auto_routing.project(payload, upstream_id_for(p.row))
 
 
 def output_cap(payload, p):
@@ -212,6 +214,7 @@ def project_messages_external(payload, model, upstream):
     """Existing Messages repairs in order; copy only the changed containers."""
     if isinstance(payload, dict) and isinstance(model, str) and upstream != model:
         payload = {**payload, 'model': upstream}
+    payload = auto_routing.project(payload, upstream)
     payload = claude_compat.strip_billing_header(payload)
     payload = claude_compat.omit_text_read_pages(payload)
     return claude_compat.flatten_deferred_tools(payload)

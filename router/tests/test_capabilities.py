@@ -9,12 +9,12 @@ class CapabilityTests(unittest.TestCase):
                          {m.slug for m in MODELS
                           if m.provider in ('openrouter', 'bedrock')})
 
-    def test_text_only_set_matches_live_metadata(self):
-        for slug in ('z-ai/glm-5.3', 'deepseek/deepseek-v4-pro-0813'):
+    def test_text_only_set_matches_the_qualified_roster(self):
+        text_only = {'z-ai/glm-5.3', 'deepseek/deepseek-v4-pro-0813',
+                     'openrouter/auto', 'openrouter/auto-code'}
+        for slug in text_only:
             self.assertEqual(input_modalities(slug), ['text'])
-        for slug in EXTERNAL_MODELS - {'z-ai/glm-5.3',
-                                         'deepseek/deepseek-v4-pro-0813',
-                                         'bedrock/openai.gpt-oss-120b'}:
+        for slug in EXTERNAL_MODELS - text_only - {'bedrock/openai.gpt-oss-120b'}:
             self.assertIn('image', input_modalities(slug))
 
     def test_reasoning_matches_live_acceptance(self):

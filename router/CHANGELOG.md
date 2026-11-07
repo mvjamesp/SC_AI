@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add optional OpenRouter Auto Code and Auto Router choices for Codex and
+  Claude Code. Let OpenRouter choose reasoning effort and retain its reported
+  model selections. Keep subscription defaults and fixed-model identity checks.
+
 ## 1.3.39
 
 - Deliver Factory 0.4.1 so team questions return to the project manager.
