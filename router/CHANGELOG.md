@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.40
+
 - Add optional OpenRouter Auto Code and Auto Router choices for Codex and
   Claude Code. Let OpenRouter choose reasoning effort and retain its reported
   model selections. Keep subscription defaults and fixed-model identity checks.
