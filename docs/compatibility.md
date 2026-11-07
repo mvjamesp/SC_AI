@@ -1,5 +1,64 @@
 # Compatibility
 
+## Auto Code and Auto Router, 7 November 2026 AEDT
+
+Codex desktop `26.1029.61003` (build `24614`), its bundled CLI
+`0.166.0-alpha.6`, and Claude Code `2.1.318` completed four isolated checks.
+Both adaptive routes used the normal Router protocol adapters and credential
+reader. Subscription defaults and running desktop apps were preserved.
+
+| Requested route | Client | Upstream requests | Provider-reported selection | Result |
+| --- | --- | --- | --- | --- |
+| `openrouter/auto-code` | Codex | 2 | `anthropic/claude-opus-5.5` | Tool call, result and final marker passed |
+| `openrouter/auto-code` | Claude Code | 3 | `openai/gpt-6.1-sol` | Two sequential Reads, paired results and final markers passed |
+| `openrouter/auto` | Codex | 2 | `anthropic/claude-opus-5.5` | Tool call, result and final marker passed |
+| `openrouter/auto` | Claude Code | 3 | `openai/gpt-6-luna` | Two sequential Reads, paired results and final markers passed |
+
+The coding and general routers choose model and effort automatically. The
+picker's sole effort value represents automatic selection; it is omitted from
+upstream requests. A reported selection is not a fixed-model identity match.
+Named-model probes retain their mismatch rejection.
+
+Checks used synthetic data, with at most eight upstream attempts per isolated
+router, 512 KiB prepared input and 2,048 output tokens per request. Claude also
+had a USD 0.25 client budget per leg. Ten requests completed, with no automatic
+leg retries. This proves tool use on these client versions; multimodal input,
+all possible underlying models and fleet delivery were not tested.
+
+The candidate still carried the 1.3.39 version stamp during these checks;
+1.3.40 changes that metadata. The tested runtime fingerprint is
+`23076f8732e6497a865961e560d98696a707af44c04b19b3e0c2d869ed1e94c5`.
+
+After the managed-policy guard was added, all four client routes passed again
+on the 1.3.40 candidate. Auto Code selected only the approved
+`openai/gpt-6.1-sol`; Auto Router selected only the approved
+`deepseek/deepseek-v4.1-flash-1017`. These four checks completed ten upstream
+requests with the same bounds. Their runtime fingerprint is
+`e9d526f5e5151d64e7845435ada39bff2d62c3fd40b6ae10deacf5103e40686c`.
+
+An earlier DeepSeek-only Auto Code pool returned HTTP 404 on both protocols:
+one Codex request and six Claude requests, with no model reply. Those failures
+remain in the ledger. One subsequent private-harness cleanup interruption
+lost its exact call count; its isolated router enforced an eight-attempt cap.
+That interrupted run is unqualified, and no cumulative spend is asserted.
+Auto Code can refuse a pool that Auto Router accepts; it never widens that pool.
+
+Review found that Codex carries an existing thread's reasoning effort when
+switching models. The final candidate accepts those valid inherited values
+for automatic routes, then omits the effort upstream. Invalid effort values
+and unsupported efforts on fixed models still refuse before a send.
+All four real-client checks passed again after that correction, using the same
+approved pools and ten successful requests. Both Codex checks explicitly sent
+Low as the inherited client effort. The final runtime fingerprint is
+`174018ef9123c1160374770fe17bca80cc7e4049fb14fff502e97f4241158c2d`.
+
+The 2,822-test core suite passed before this narrow correction, with 11 skips.
+The 118 affected tests then passed on the final runtime, including the carried
+effort regression, every model's protocol conformance and fixed-model refusal.
+
+The OpenRouter checks do not replace subscription-route checks required
+before publication after the Codex upgrade.
+
 ## Router 1.3.39 current-client checks, 5 November 2026 AEDT
 
 Clients: Codex desktop `26.1027.61615` (build `24141`), its bundled CLI

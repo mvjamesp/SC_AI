@@ -39,6 +39,8 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 try:
     from tools.claude_probe_env import environment
     from tools.claude_probe_report import accepted as _accepted, identity as _identity, stream_report as _stream_report
@@ -53,7 +55,6 @@ MULTI_PROMPT = ('Read probe-1.txt first, then read probe-2.txt in a separate '
                 'the two file contents separated by one space.')
 # The stub MCP server and its catalogue live with the capture harness, which
 # already owns the shape of a deferred Claude Code request.
-ROOT = Path(__file__).resolve().parents[1]
 STUB_MCP = ROOT / 'tools' / 'mcp_stub_server.py'
 STUB_SERVER = 'stubtools'
 STUB_TOOL = 'mcp__%s__tool_000' % STUB_SERVER

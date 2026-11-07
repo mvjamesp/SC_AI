@@ -44,6 +44,14 @@ Keep subscription traffic on its subscription provider. External models use
 separate credentials. External calls cost money; a personal key has no local
 spend cap. Never paste keys into chats or support tickets.
 
+OpenRouter's **Auto Code** and **Auto Router** are optional external choices.
+Auto Code focuses on coding; Auto Router handles general tasks. Each chooses
+the underlying model and reasoning effort automatically, and charges that
+model's OpenRouter rate. Subscription defaults stay unchanged. Use a named
+model when a task or review requires a specific model and effort.
+On managed installations, automatic choices select only the named OpenRouter
+models approved by company policy. An empty approved pool refuses the request.
+
 Claude Code support remains in preview. Third-party models in Claude Code
 sit outside Anthropic's supported model scope. See [integration scope and
 data flows](docs/publication.md) before deciding to deploy.

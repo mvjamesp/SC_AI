@@ -25,6 +25,10 @@ Responses protocol adapter; Claude uses the Messages protocol adapter. Both
 share the service, model registry and transport. Client-specific modules own
 only their client's integration, not another router.
 
+`auto_routing` owns the two adaptive OpenRouter identities and their automatic
+effort projection. Both protocol adapters retain their normal tool and credential
+boundaries. Evidence records the provider's selection separately from a fixed-model match.
+
 The unused `codex_router` source import alias was removed after the 29 October
 2026 consumer check. Repository source, available source checkouts, installed
 scripts and indexed external code had no active imports of that package.
