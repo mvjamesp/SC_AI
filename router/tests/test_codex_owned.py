@@ -262,7 +262,7 @@ class CodexOwnershipTests(unittest.TestCase):
             {'port': 4321, 'token': 'synthetic-route'}))
         blocks._codex.write_client_receipt(self.home, 'codex', entry)
         with self.assertRaises(switcher.SwitchError):
-            switcher._apply(self.home, entry, 'switched', lambda _: False, None)
+            switcher._apply(self.home, entry, 'switched', lambda _root, _target: False, None)
         restored = blocks._codex.codex_attachment(self.home)
         self.assertNotIn('person_setting', restored['inserted_block'])
         blocks._codex.attach_config(self.config, self.block, restored)

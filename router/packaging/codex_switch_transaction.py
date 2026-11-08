@@ -16,6 +16,7 @@ _blocks = _load("codex_switch_config")
 _receipts = _load("codex_config")
 _atomic = _load("atomic_write")
 SWITCHED, SWITCHED_BACK = _blocks.SWITCHED, _blocks.SWITCHED_BACK
+ROUTED_VARIANTS = _blocks.ROUTED_VARIANTS
 MARKER = "codex-switch-pending.json"
 NOT_PROVEN = "The ChatGPT app (Codex) could not use the new settings, so nothing changed."
 FAILED = "The ChatGPT app (Codex) could not be switched. Try again."
@@ -49,7 +50,7 @@ def _apply(home, entry, target, prove, root, *, reopen=None, before_restore=None
         raise SwitchError(FAILED) from exc
     try:
         _blocks.switch(home, target)
-        if target == SWITCHED and prove(root) is not True:
+        if target in ROUTED_VARIANTS and prove(root, target) is not True:
             raise SwitchError(NOT_PROVEN)
         if reopen is not None:
             reopen()
@@ -76,7 +77,7 @@ def _recover(home, prove, root, *, reopen=None, before_restore=None):
         pending = json.loads(marker.read_text())
         entry, target = pending['entry'], pending['to']
         written = _blocks.current(home) == target
-        if not (written and (target == SWITCHED_BACK or prove(root) is True)):
+        if not (written and (target == SWITCHED_BACK or prove(root, target) is True)):
             _restore(home, entry, target, before_restore)
         if reopen is not None:
             reopen()

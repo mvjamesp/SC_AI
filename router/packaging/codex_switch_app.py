@@ -49,7 +49,7 @@ def _owner(home):
 def _switched(home):
     """True while Codex is switched, and when that cannot be told: keep the way back."""
     try:
-        return _blocks.current(home) == _blocks.SWITCHED
+        return _blocks.current(home) in _blocks.ROUTED_VARIANTS
     except (OSError, ValueError, SystemExit):
         return True
 

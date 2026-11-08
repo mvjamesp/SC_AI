@@ -47,7 +47,7 @@ def main(home=None, run=subprocess.run):
         print(OLDER, file=sys.stderr)
         tell(OLDER, icon, run)
         return 1
-    sys.argv = [str(helper), '--home', str(home)]
+    sys.argv = [str(helper), '--home', str(home), *sys.argv[1:]]
     try:
         runpy.run_path(str(helper), run_name='__main__')  # its own main() exits
     except Exception:

@@ -1,11 +1,11 @@
 """Prove a switched Codex config with Codex's own loader before the app reopens.
 
-Switch Codex writes the `switched` block while the ChatGPT app (Codex) is
+Switch Codex writes an OpenRouter block while the ChatGPT app (Codex) is
 closed, then starts the Codex CLI bundled in that app as a short-lived app
 server on the same CODEX_HOME. The config must load, `account/read` must
-report no account (that is what lets the app send without ChatGPT sign-in),
-and `configRequirements/read` must carry no managed `model_provider`, which
-would override the switch. A config Codex cannot read (a second root
+report the account state for that variant, and `configRequirements/read` must
+carry no managed `model_provider`, which would override the switch. A config
+Codex cannot read (a second root
 `model_provider` in the person's own settings, say) never answers, so it
 fails, as does a loader that cannot start. Switching back is never proven:
 it is the only way out of `switched` and must depend on nothing it can lose.
@@ -98,7 +98,8 @@ def _windows_bin(env, app_root, app_exe, run, record):
     return None
 
 
-def prove(app_root, codex_home=None, env=None, timeout=30, *, app_exe=None, command=None):
+def prove(app_root, codex_home=None, env=None, timeout=30, *, app_exe=None, command=None,
+          signed_out=True):
     """True when Codex's loader accepts the switched config.toml, else False."""
     env = dict(os.environ if env is None else env)
     command = command or codex_bin(env, app_root, app_exe=app_exe)
@@ -123,8 +124,12 @@ def prove(app_root, codex_home=None, env=None, timeout=30, *, app_exe=None, comm
         _call(child, lines, deadline, 0, 'initialize',
               {'clientInfo': {'name': 'scg-switch-codex', 'version': '1'}})
         _send(child, {'method': 'initialized'})
-        if _call(child, lines, deadline, 1, 'account/read',
-                 {'refreshToken': False}).get('account') is not None:
+        account = _call(child, lines, deadline, 1, 'account/read',
+                        {'refreshToken': False}).get('account')
+        if signed_out and account is not None:
+            return False
+        if not signed_out and (not isinstance(account, dict)
+                               or account.get('type') != 'chatgpt'):
             return False
         required = _call(child, lines, deadline, 2,
                          'configRequirements/read').get('requirements') or {}

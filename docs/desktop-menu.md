@@ -14,10 +14,12 @@ Choose a destination in that assistant's section:
 
 | Assistant | Connection choices |
 | --- | --- |
-| Codex | ChatGPT + OpenRouter; OpenRouter only |
+| Codex | ChatGPT + OpenRouter; OpenRouter only; OpenRouter for usage limits |
 | Claude | Claude subscription; OpenRouter |
 
 The checkmark identifies the selected connection. Selecting it again does nothing.
+OpenRouter only keeps your ChatGPT sign-in. OpenRouter for usage limits signs
+Codex out so Send remains available when the subscription is exhausted.
 Connecting Claude leaves it on your Claude subscription, which it is already using.
 Choose **OpenRouter** to switch; setup offers the same switch when you connect Claude.
 Before a change, SCG Router explains the required assistant restart.

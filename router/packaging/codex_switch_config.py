@@ -3,13 +3,15 @@
 Codex desktop 26.917.51856 and later disables Send once the ChatGPT allowance
 runs out, but only while its active provider needs OpenAI sign-in, and the
 default subscription block keeps Codex on its built-in provider. Switch Codex
-writes one of two other variants between the same markers:
+writes one of three other variants between the same markers:
 
 - `switched`, root keys only: the active provider becomes `scg_router`, which
-  needs no OpenAI sign-in and marks every request with the route header, and
-  the picker reads the routed-only list. `openai_base_url` stays, so threads
-  started on the built-in provider still resume through the router, and
-  approvals stay with the person, as in every managed block.
+  needs no OpenAI sign-in during an active usage-limit episode. The picker
+  reads the routed-only list. `openai_base_url` stays, so threads started on
+  the built-in provider still resume through the router, and approvals stay
+  with the person, as in every managed block.
+- `switched_signed_in`: the same routed-only provider with ChatGPT sign-in
+  retained for normal use, so projects and setup state stay with the account.
 - `switched_back`: the default block plus `scg_router` with sign-in required,
   so threads started while switched still resume.
 
@@ -29,8 +31,10 @@ import importlib.util
 import json
 from pathlib import Path
 
-DEFAULT, SWITCHED, SWITCHED_BACK = 'default', 'switched', 'switched_back'
-VARIANTS = (DEFAULT, SWITCHED, SWITCHED_BACK)
+DEFAULT, SWITCHED, SWITCHED_SIGNED_IN, SWITCHED_BACK = (
+    'default', 'switched', 'switched_signed_in', 'switched_back')
+ROUTED_VARIANTS = (SWITCHED, SWITCHED_SIGNED_IN)
+VARIANTS = (DEFAULT, *ROUTED_VARIANTS, SWITCHED_BACK)
 PROVIDER = 'scg_router'
 # The router owns these two names (ai_router/codex_route.HEADER and
 # ai_router/routed_models.NAME). The installer never imports the router
@@ -72,11 +76,14 @@ def build(home, state, mode, static_catalogue, variant):
     block = _codex.build_block(home, state, mode, static_catalogue)
     if variant == DEFAULT:
         return block
+    if mode == 'none':
+        return block
     # The URL codex_config.build_block writes; a test pins the two together.
     url = 'http://127.0.0.1:%s/%s/backend-api/codex' % (state['port'], state['token'])
     provider = ('model_providers.%s = { name = "SC router", base_url = "%s", '
                 'wire_api = "responses", requires_openai_auth = ' % (PROVIDER, url))
-    if variant == SWITCHED:
+    if variant in ROUTED_VARIANTS:
+        sign_in = 'true' if variant == SWITCHED_SIGNED_IN else 'false'
         return ''.join((
             _codex.BEGIN + '\n',
             'openai_base_url = "%s"\n' % url,
@@ -86,13 +93,9 @@ def build(home, state, mode, static_catalogue, variant):
             # Attach moves the owner's own line into the receipt, and this
             # route refuses the ChatGPT model an automatic reviewer would use.
             'approvals_reviewer = "user"\n',
-            provider + 'false, http_headers = { "%s" = "routed", "%s" = "Bearer %s" } }\n'
+            provider + sign_in + ', http_headers = { "%s" = "routed", "%s" = "Bearer %s" } }\n'
             % (HEADER, _codex.IMAGE_AUTH_HEADER, state['token']),
             _codex.END + '\n'))
-    if mode == 'none':
-        # The no-subscription block already defines the provider, sign-in off;
-        # a second definition would make the whole file unreadable.
-        return block
     return block.replace(_codex.END, provider + 'true }\n' + _codex.END, 1)
 
 
@@ -112,7 +115,7 @@ def refuse_switched(home):
         variant = current(home)
     except (OSError, ValueError):
         return
-    if variant == SWITCHED:
+    if variant in ROUTED_VARIANTS:
         raise SystemExit(SWITCHED_REFUSAL)
 
 
@@ -141,16 +144,15 @@ def rollback_entry(entry):
 def switch(home, variant):
     """Rewrite Codex's managed block as `variant` and record it in the receipt.
 
-    Only `switched` and `switched_back` can be set. config.toml is replaced
+    Only an OpenRouter variant and `switched_back` can be set. config.toml is replaced
     atomically, then the receipt; when the receipt cannot be written the
     config is put back as it was. The owner's model pick is carried, as on
     every attach. The caller holds the installer lock (`service.install_lock`)
     so an update cannot interleave. Refuses with a plain SystemExit when Codex
     is not attached or its managed block was edited by hand.
     """
-    if variant not in (SWITCHED, SWITCHED_BACK):
-        raise ValueError('Switch Codex sets %s or %s, not %r'
-                         % (SWITCHED, SWITCHED_BACK, variant))
+    if variant not in (*ROUTED_VARIANTS, SWITCHED_BACK):
+        raise ValueError('Switch Codex cannot set %r' % (variant,))
     entry = _codex.codex_attachment(home)
     if not entry.get('inserted_block'):
         raise SystemExit(NOT_CONNECTED)

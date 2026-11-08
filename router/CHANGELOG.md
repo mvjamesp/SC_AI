@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Keep ChatGPT projects and setup state when switching to OpenRouter during
+  normal use. Preserve the signed-out fallback for an active usage limit,
+  and explain when projects and setup choices stay separate.
+- Preserve existing OpenRouter variants during updates. Verify the expected
+  account state and never forward ChatGPT credentials to OpenRouter.
+
 ## 1.3.40
 
 - Add optional OpenRouter Auto Code and Auto Router choices for Codex and

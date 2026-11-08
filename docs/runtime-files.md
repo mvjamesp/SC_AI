@@ -211,8 +211,10 @@ switch that refused can be diagnosed afterwards:
 ```
 
 `at` is the local time with its offset. `to` is the variant the run aimed
-for, `switched` or `switched_back`, or `null` when it refused before choosing
-one. `result` is `done`, `cancelled` or the message the person saw, which
+for: `switched` for the signed-out limit fallback, `switched_signed_in` for
+normal OpenRouter-only use, or `switched_back` for the subscription. It is
+`null` when the run refused before choosing one. `result` is `done`,
+`cancelled` or the message the person saw, which
 never holds paths, settings, addresses or keys. `open` appears only when the
 app did not close: the sorted file names of the executables still running
 from the app bundle, never their paths or arguments, or `null` when the

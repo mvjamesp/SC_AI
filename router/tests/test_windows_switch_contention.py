@@ -73,10 +73,10 @@ class WindowsSwitchContentionTests(unittest.TestCase):
 
     def switch(self):
         return switcher.switch(self.home, run=self.run_command,
-                               prove=lambda _: True, ready=lambda _: True)
+                               prove=lambda _root, _target: True, ready=lambda _: True)
 
     def test_forty_six_process_tree_has_its_own_budget_and_switches(self):
-        self.assertEqual(self.switch(), 'switched')
+        self.assertEqual(self.switch(), 'switched_signed_in')
         self.assertEqual(len(self.rows), 46)
         self.assertEqual(len(self.budgets), 2)
         self.assertTrue(all(12.3 < budget <= 60 for budget in self.budgets))
@@ -116,7 +116,7 @@ class WindowsSwitchContentionTests(unittest.TestCase):
             release.set()
             self.assertTrue(finished.wait(5))
         self.on_wait = release_update
-        self.assertEqual(self.switch(), 'switched')
+        self.assertEqual(self.switch(), 'switched_signed_in')
         self.assertEqual(len(self.waits), 1)
         self.assertIn('Waiting for SCG Router', self.waits[0])
         self.assertTrue(self.config.read_text().endswith('# edit during update\n'))

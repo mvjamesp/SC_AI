@@ -78,7 +78,7 @@ class SwitchCodexQuitTests(unittest.TestCase):
 
     def switch(self, app, run=None):
         return switcher.switch(self.home, run=run or mock.Mock(), platform_ops=app,
-                               prove=lambda root: True, ready=lambda home: True)
+                               prove=lambda root, target: True, ready=lambda home: True)
 
     def lines(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
@@ -95,14 +95,14 @@ class SwitchCodexQuitTests(unittest.TestCase):
                                     text=True, timeout=5)
         [line] = self.lines()
         self.assertEqual((line['to'], line['result'], line['open']),
-                         ('switched', DID_NOT_CLOSE, ['ChatGPT', 'browser_crashpad_handler']))
+                         ('switched_signed_in', DID_NOT_CLOSE, ['ChatGPT', 'browser_crashpad_handler']))
 
     def test_each_run_logs_its_target_and_result_and_a_failed_log_changes_nothing(self):
         self.assertIsNone(self.switch(FakeApp(self.app, confirm=False)))
-        self.assertEqual(self.switch(FakeApp(self.app)), 'switched')
+        self.assertEqual(self.switch(FakeApp(self.app)), 'switched_signed_in')
         cancelled, done = self.lines()
-        self.assertEqual((cancelled['to'], cancelled['result']), ('switched', 'cancelled'))
-        self.assertEqual((done['to'], done['result']), ('switched', 'done'))
+        self.assertEqual((cancelled['to'], cancelled['result']), ('switched_signed_in', 'cancelled'))
+        self.assertEqual((done['to'], done['result']), ('switched_signed_in', 'done'))
         self.assertNotIn('open', done)
         self.assertIsNotNone(datetime.fromisoformat(done['at']).utcoffset())
         self.log.unlink()

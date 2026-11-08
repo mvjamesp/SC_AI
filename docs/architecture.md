@@ -846,14 +846,16 @@ It never copies history, and uninstall preserves unrelated user hooks. The
 callback runs Python with `-P`, so a file in the session's project folder can
 never stand in for a module it imports.
 
-`packaging/codex_switch_config.py` owns the three managed Codex blocks. The
+`packaging/codex_switch_config.py` owns the four managed Codex blocks. The
 default is `codex_config.build_block` unchanged, so a never-switched install
 and older Codex builds see nothing new. `switched` is root keys only: Codex's
 active provider becomes `scg_router`, which needs no OpenAI sign-in, sends
 `x-scg-codex-route` and reads `routed-models.json`, and
 `approvals_reviewer = "user"` stays, as in every managed block, because
 attach moves the owner's own line into the receipt and this route refuses
-ChatGPT's reviewer. `switched_back` is the default plus `scg_router` with
+ChatGPT's reviewer. `switched_signed_in` keeps the same routed-only connection
+with ChatGPT sign-in for normal use, preserving account projects and setup
+state. `switched_back` is the default plus `scg_router` with
 sign-in on, so threads started while switched still resume. The Codex receipt
 entry records the variant (`variant`, absent until the first switch), and
 `client_choice.attach_codex` rebuilds it on every install and update.
@@ -885,13 +887,15 @@ Settings remain pending until proof and a visible reopened package window succee
 Cold reopening has a separate thirty-second bound.
 Failure restores the previous owned settings and attempts fresh-package reopening.
 
-`switched` is strict. It needs `codex_route.ready`, a subscription install
+Both OpenRouter variants are strict. They need `codex_route.ready`, a subscription install
 (no-subscription mode already runs without sign-in), exactly one ChatGPT app
 (Codex) with its bundled CLI at the verified platform installation, and a verified
 exit. It then writes a pending marker, calls `codex_switch_config.switch` and
 proves the result with `codex_config_proof`: that CLI, started as an app
 server on `~/.codex`, must load the config and report no managed
-`model_provider` and no account. Any doubt refuses before the dialog; a failed
+`model_provider` and the variant's account state. Normal use requires the
+ChatGPT account; the active-limit fallback requires no account. Any doubt
+refuses before the dialog; a failed
 proof puts back the previous receipt entry and the block exactly as
 config.toml held it, the owner's latest model pick included, through
 `codex_switch_config.restore`, and reopens the app.
@@ -914,11 +918,12 @@ included, and swallows anything it raises. It reads the router's
 `codex-usage-limit.json` itself, because the router's reader needs Python
 3.14, so its parsing and five-hour rule are copies that a test pins to
 `ai_router/usage_episodes.py`. On macOS, for a Codex install in subscription
-mode that has `APP`, it offers Switch Codex once per episode from an affected
-desktop build, and the way back once Codex is switched and the episode has
-ended or the installed ChatGPT app is at or above `FIXED_IN`. The dialog is
-only the offer: its action opens Switch Codex, which asks before it changes
-anything. `APP` is the one place the Switch Codex app's location is named.
+mode that has `APP`, it offers the signed-out fallback once per episode from
+an affected desktop build. It offers the way back only while that fallback is
+active and the episode has ended or the installed ChatGPT app is at or above
+`FIXED_IN`. The offer passes an explicit destination through the launcher.
+Switch Codex still asks before it changes anything. `APP` is the one place
+the Switch Codex app's location is named.
 
 `packaging/codex_switch_app.py` owns that app. Every Codex attach and update
 builds or refreshes it on a Mac when Codex is attached in subscription mode

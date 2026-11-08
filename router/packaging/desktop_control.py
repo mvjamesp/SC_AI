@@ -13,13 +13,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from native_payload import load, succeeded
 
 DESTINATIONS = {
-    'codex': [('subscription', 'ChatGPT + OpenRouter'), ('openrouter', 'OpenRouter only')],
+    'codex': [('subscription', 'ChatGPT + OpenRouter'), ('openrouter', 'OpenRouter only'),
+              ('openrouter_fallback', 'OpenRouter for usage limits')],
     'claude': [('subscription', 'Claude subscription'), ('openrouter', 'OpenRouter')]}
 MAINTENANCE = ('setup.status', 'setup.resume', 'setup.add', 'setup.key', 'setup.remove',
                'router.restart', 'updates.check', 'updates.install',
                'help.guide', 'help.support', 'startup.toggle')
 ACTIONS = MAINTENANCE + tuple(client + '.' + action for client in DESTINATIONS
-                             for action in ('subscription', 'openrouter', 'open'))
+                             for action in ('subscription', 'openrouter', 'open')) + ('codex.openrouter_fallback',)
 BUSY = 'SCG Router is busy. Try again shortly.'
 
 
@@ -48,7 +49,10 @@ def snapshot(home):
                 entry = owner._codex.codex_attachment(home)
                 owner.managed_block(entry)
                 subscription = entry.get('openai_mode') != 'none'
-                selected = ('openrouter' if owner.current(home) == owner.SWITCHED
+                variant = owner.current(home)
+                selected = ('openrouter' if not subscription else
+                            'openrouter_fallback' if variant == owner.SWITCHED else
+                            'openrouter' if variant == owner.SWITCHED_SIGNED_IN
                             or not subscription else 'subscription')
             else:
                 owner = load('claude_desktop_switch')
@@ -59,7 +63,7 @@ def snapshot(home):
             selected = None
         clients.append(dict(id=client, label='Codex' if client == 'codex' else 'Claude',
                             selected=selected, choices=[dict(id=key, label=label,
-                            enabled=key != 'subscription' or subscription)
+                            enabled=key not in ('subscription', 'openrouter_fallback') or subscription)
                             for key, label in DESTINATIONS[client]]))
     health = raw.get('routing_healthy')
     status = ('Running' if health is True else
@@ -120,8 +124,10 @@ def execute(home, resources, action, run=subprocess.run):
                     owner._platform.open_app(sys.platform, app=owner.CODEX)
                 result = True
             else:
-                result = owner.switch(home, target=('switched' if target == 'openrouter'
-                                                     else 'switched_back'))
+                result = owner.switch(home, target={
+                    'openrouter': 'switched_signed_in',
+                    'openrouter_fallback': 'switched',
+                    'subscription': 'switched_back'}[target])
         else:
             owner = load('claude_desktop_switch')
             result = owner.switch(home, action='start' if target == 'open' else 'switch',

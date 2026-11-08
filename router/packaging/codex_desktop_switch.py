@@ -30,15 +30,21 @@ _atomic = _transaction._atomic
 _service = _load('service')
 _installation = _load('windows_installation')
 _dialog = _load('native_dialog')
+_offer = _load('codex_switch_offer')
 CODEX = _platform.App('com.openai.codex', ())
 MARKER = _transaction.MARKER
-SWITCHED, SWITCHED_BACK = _blocks.SWITCHED, _blocks.SWITCHED_BACK
+SWITCHED, SWITCHED_SIGNED_IN, SWITCHED_BACK = (
+    _blocks.SWITCHED, _blocks.SWITCHED_SIGNED_IN, _blocks.SWITCHED_BACK)
+ROUTED_VARIANTS = _blocks.ROUTED_VARIANTS
 # Plain wording (AGENTS.md section 4a), naming the app as people see it.
 PROMPTS = {
-    SWITCHED: 'Switch the ChatGPT app (Codex) to OpenRouter models? It will restart.',
+    SWITCHED_SIGNED_IN: 'Switch the ChatGPT app (Codex) to OpenRouter models? It will restart.',
+    SWITCHED: ('Switch the ChatGPT app (Codex) to OpenRouter models while your subscription is limited? '
+               'It will restart. Projects and setup choices stay separate until you switch back.'),
     SWITCHED_BACK: ('Switch the ChatGPT app (Codex) back to your ChatGPT subscription? '
                     'It will restart.')}
-DESTINATIONS = {SWITCHED: 'OpenRouter models', SWITCHED_BACK: 'your ChatGPT subscription'}
+DESTINATIONS = {variant: 'OpenRouter models' for variant in ROUTED_VARIANTS}
+DESTINATIONS[SWITCHED_BACK] = 'your ChatGPT subscription'
 MAC_ONLY = 'Switch Codex is available on Mac.'
 BUSY = 'SCG Router is updating. Try again in a minute.'
 WAITING = 'Waiting for SCG Router to finish an update. Cancel leaves Codex unchanged.'
@@ -93,7 +99,7 @@ def _switch_lock(home, record):
 
 def switch(home, *, run=subprocess.run, platform_ops=None, prove=None, ready=None, target=None):
     """Move Codex to the other variant; returns it, or None when cancelled."""
-    if target not in (None, SWITCHED, SWITCHED_BACK):
+    if target not in (None, SWITCHED, SWITCHED_SIGNED_IN, SWITCHED_BACK):
         raise ValueError('Unknown Codex destination.')
     home, record = Path(home), {'to': None}
     try:
@@ -131,15 +137,16 @@ def _switch(home, run, ops, prove, ready, record, target=None):
                                                run=run, record=record)
         return selected['path']
     if prove is _proof.prove:
-        def prove(root):
+        def prove(root, target):
             cli = command()
-            return cli is not None and _proof.prove(root, app_exe=app_exe, command=cli)
+            return cli is not None and _proof.prove(root, app_exe=app_exe, command=cli,
+                                                    signed_out=target == SWITCHED)
     supplied_proof = prove
-    def checked_proof(root):
+    def checked_proof(root, target):
         if sys.platform == 'win32' and identity and identity.get('family'):
             ops._checked_identity(sys.platform, run, CODEX, identity)
         result = _timed(record, 'proof', lambda: (sys.platform != 'win32' or _serving_current(home))
-                        and supplied_proof(root))
+                        and supplied_proof(root, target))
         record['proof_ok'] = result is True
         if sys.platform == 'win32' and identity and identity.get('family'):
             ops._checked_identity(sys.platform, run, CODEX, identity)
@@ -189,12 +196,18 @@ def _switch(home, run, ops, prove, ready, record, target=None):
         raise SwitchError(_blocks.EDITED) from exc
     if current is None:
         raise SwitchError(_blocks.NOT_CONNECTED)
-    if target == SWITCHED and entry.get('openai_mode') == 'none':
+    if target in ROUTED_VARIANTS and entry.get('openai_mode') == 'none':
+        raise SwitchError(NOTHING_TO_SWITCH)
+    if target in ROUTED_VARIANTS:
+        if current == target:
+            return target
+    elif target == SWITCHED_BACK and current not in ROUTED_VARIANTS:
         return target
-    if target and ((current == SWITCHED) == (target == SWITCHED)):
-        return target
-    target = record['to'] = target or (SWITCHED_BACK if current == SWITCHED else SWITCHED)
-    if target == SWITCHED:
+    target = record['to'] = target or (
+        SWITCHED if current == SWITCHED_SIGNED_IN and _offer.fallback_needed(home) else
+        SWITCHED_BACK if current in ROUTED_VARIANTS else
+        (SWITCHED if _offer.fallback_needed(home) else SWITCHED_SIGNED_IN))
+    if target in ROUTED_VARIANTS:
         if entry.get('openai_mode') == 'none':
             raise SwitchError(NOTHING_TO_SWITCH)
         if sys.platform == 'win32' and not _serving_current(home):
@@ -222,7 +235,7 @@ def _switch(home, run, ops, prove, ready, record, target=None):
         try:
             closed = stop()
         except (OSError, subprocess.SubprocessError) as exc:
-            if target == SWITCHED or sys.platform == 'win32':
+            if target in ROUTED_VARIANTS or sys.platform == 'win32':
                 record.update(_platform.error_facts(exc, 'request_stop'))
                 message = stayed_open if record.get('reason') == 'still_running' else (
                     CHECK_FAILED if sys.platform == 'win32' else FAILED)
@@ -334,7 +347,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', default=os.environ.get(
         'ROUTER_HOME', str(Path.home() / '.codex' / 'mixed-model-router')))
-    parser.add_argument('--to', choices=(SWITCHED, SWITCHED_BACK))
+    parser.add_argument('--to', choices=(SWITCHED, SWITCHED_SIGNED_IN, SWITCHED_BACK))
     args = parser.parse_args(argv)
     try:
         switch(Path(args.home).expanduser(), target=args.to)
