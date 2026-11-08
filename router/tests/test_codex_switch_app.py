@@ -83,7 +83,7 @@ class SwitchCodexAppTests(unittest.TestCase):
             'CFBundleName': 'Switch Codex', 'CFBundleExecutable': 'Switch Codex',
             'CFBundleIconFile': 'router.icns', 'LSUIElement': True, app.HOME_KEY: str(self.home)})
         executable = self.target / 'Contents' / 'MacOS' / 'Switch Codex'
-        self.assertEqual(executable.read_text(), "#!/bin/sh\nexec '%s' %s\n"
+        self.assertEqual(executable.read_text(), "#!/bin/sh\nexec '%s' %s \"$@\"\n"
                          % (PYTHON, self.home / app.LAUNCHER))
         self.assertTrue(executable.stat().st_mode & 0o100)
         self.assertEqual((self.home / app.LAUNCHER).read_bytes(),
@@ -217,6 +217,29 @@ class LauncherTests(unittest.TestCase):
         helper = self.home / 'releases' / '1.0.0' / 'packaging' / 'codex_desktop_switch.py'
         self.assertEqual(json.loads(record.read_text()), [str(helper), '--home', str(self.home)])
         self.assertEqual(self.shown, [])
+
+    def test_forwards_the_offer_destination_to_the_current_release(self):
+        record = self.home / 'argv.json'
+        self.release('1.0.0', 'import json, sys\nopen(%r, "w").write(json.dumps(sys.argv))\n'
+                     % str(record))
+        with mock.patch.object(launcher.sys, 'argv', ['launcher', '--to', 'switched']):
+            self.assertEqual(self.run_launcher(), 0)
+        helper = self.home / 'releases' / '1.0.0' / 'packaging' / 'codex_desktop_switch.py'
+        self.assertEqual(json.loads(record.read_text()),
+                         [str(helper), '--home', str(self.home), '--to', 'switched'])
+
+    def test_generated_shortcut_forwards_the_offer_destination(self):
+        record = self.home / 'argv.json'
+        self.release('1.0.0', 'import json, sys\nopen(%r, "w").write(json.dumps(sys.argv))\n'
+                     % str(record))
+        target = self.home / 'Switch Codex.app'
+        app._platform.install_mac_app(target, app.BUNDLE_ID, sys.executable, self.home,
+                                      app.LAUNCHER, run=lambda *args, **kwargs: SimpleNamespace())
+        executable = target / 'Contents' / 'MacOS' / 'Switch Codex'
+        subprocess.run([str(executable), '--to', 'switched'], check=True)
+        helper = self.home / 'releases' / '1.0.0' / 'packaging' / 'codex_desktop_switch.py'
+        self.assertEqual(json.loads(record.read_text()),
+                         [str(helper.resolve()), '--home', str(self.home.resolve()), '--to', 'switched'])
 
     def test_an_older_or_broken_release_gets_one_plain_message(self):
         for label, prepare, message in (

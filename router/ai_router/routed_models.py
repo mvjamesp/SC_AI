@@ -1,7 +1,7 @@
 """The routed-only Codex model list, `routed-models.json` beside the mixed list.
 
-Switch Codex points Codex's picker at this file while Codex runs without
-ChatGPT sign-in, so it must never offer a model that route cannot serve. It
+Switch Codex points Codex's picker at this file on the OpenRouter-only
+connection, so it must never offer a model that route cannot serve. It
 holds the rows no-subscription mode shows (routed rows and their OpenAI twins,
 no visible ChatGPT subscription rows) under the same key availability and portco
 allowlist as `mixed-models.json`, and every availability sync rewrites it

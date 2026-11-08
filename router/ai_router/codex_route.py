@@ -2,11 +2,11 @@
 
 Codex desktop 26.917.51856 and later disables Send for every model once the
 ChatGPT allowance runs out, but only while its active provider needs OpenAI
-sign-in. Switch Codex therefore points Codex at the router through a provider
-entry that needs no sign-in and sends `HEADER` with every request. Codex then
-sends no ChatGPT credentials, so a ChatGPT subscription turn forwarded as usual
-fails upstream, is retried five times, and ends on an error that shows the
-router's address. The header marks the route; a missing credential never does.
+sign-in. The active-limit Switch Codex fallback therefore needs no sign-in.
+Normal OpenRouter-only use keeps the ChatGPT account for projects and setup
+state. Both variants send `HEADER` with every request, so a subscription turn
+is refused locally instead of failing upstream after retries. The header
+marks the route; a missing credential never does.
 
 On that route a ChatGPT request is answered here and nothing is sent. Native
 service paths get the no-subscription answers from `local_services`. Every
@@ -55,8 +55,8 @@ def message(twin=None):
         # A picker label reads `<Vendor>: <Model> · <Provider>` (AGENTS.md section 8).
         subject = twin.display_name.removesuffix(' · ' + label).removeprefix(twin.vendor + ': ')
         pick = f'Pick "{twin.display_name}" to use it through {label}'
-    return (f'{subject} uses your {login}, which is off while Codex is switched to '
-            f'{routed} models. {pick}, or open Switch Codex to go back to your {login}.')
+    return (f'{subject} needs your {login}, which is unavailable on the '
+            f'{routed}-only connection. {pick}, or open Switch Codex to go back to your {login}.')
 
 
 def refuse(path, payload, context, twin=None):

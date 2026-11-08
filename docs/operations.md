@@ -326,10 +326,16 @@ manager. Direct `do_install` calls in tests must use the fake `run` seam.
 Open the [SCG Router menu](desktop-menu.md) and choose an explicit Codex connection.
 The existing Mac Switch Codex shortcut remains available for recovery.
 
+Choose **OpenRouter only** to keep your ChatGPT sign-in. Choose **OpenRouter
+for usage limits** to sign out deliberately when Send is blocked. The second
+choice is always available, even when Router has no recorded usage episode.
+
 From version 26.917.51856, the ChatGPT app (Codex) stops sending messages once
 your ChatGPT subscription reaches its usage limit, even for OpenRouter models.
-Switch Codex selects a separately billed OpenRouter profile until the
-limit resets, then back to your ChatGPT subscription. On Mac, SCG Router adds Switch Codex to your
+Switch Codex keeps your ChatGPT sign-in during normal OpenRouter use, so
+projects and setup choices stay with your account. During an active limit,
+the fallback signs Codex out to keep Send available. Projects and setup
+choices stay separate until you switch back. On Mac, SCG Router adds Switch Codex to your
 Applications folder when Codex uses your ChatGPT subscription and your ChatGPT
 app is affected.
 
@@ -353,8 +359,8 @@ On Mac and Linux, an unavailable app can use the manual quit and reopen path.
 While Codex is switched:
 
 - only OpenRouter models are listed, and they are billed to OpenRouter;
-- image generation uses GPT Image 2 and bills the OpenRouter key without a
-  ChatGPT sign-in; see [media generation](media-generation.md);
+- image generation uses GPT Image 2 and bills the OpenRouter key; the
+  active-limit fallback needs no ChatGPT sign-in; see [media generation](media-generation.md);
 - a model that needs your ChatGPT subscription answers with a short message
   that says what to pick instead;
 - Codex still asks you before it runs a command that needs approval;

@@ -110,6 +110,7 @@ class OfferTests(_Home):
         script = self.spawned[0][-1]
         self.assertIn(json.dumps(offers.MESSAGES[offers.SWITCH]), script)
         self.assertIn('/usr/bin/open " & quoted form of ' + json.dumps(str(offers.APP)), script)
+        self.assertIn(' & " --args --to switched"', script)
         self.assertEqual(self.offered(), {'seen_at': stamp(T0), 'offered': ['switch']})
         if os.name != 'nt':
             mode = stat.S_IMODE(os.stat(self.home / offers.OFFERS_FILE).st_mode)
@@ -166,6 +167,22 @@ class OfferTests(_Home):
         self.assertEqual(len(self.spawned), 1)
         self.assertIn(json.dumps(offers.MESSAGES[offers.BACK]), self.spawned[0][-1])
         self.assertEqual(self.offered(), {'seen_at': stamp(T0), 'offered': ['back']})
+
+    def test_signed_in_openrouter_gets_the_fallback_offer_but_no_way_back(self):
+        self.attach(variant='switched_signed_in')
+        self.record()
+        self.assertEqual(self.run_pass(), offers.SWITCH)
+        self.assertIn('--args --to switched', self.spawned[0][-1])
+        self.assertIsNone(self.run_pass(T0 + HOUR))
+
+    def test_an_active_episode_never_offers_the_way_back_on_version_uncertainty(self):
+        for version in (None, '26.917.51855'):
+            with self.subTest(version=version):
+                self.reset()
+                self.attach(variant='switched')
+                self.write_episode(version)
+                self.assertTrue(offers.fallback_needed(self.home, T0 + 60))
+                self.assertIsNone(self.run_pass())
 
     def test_a_fixed_build_ends_the_offers_and_gets_the_way_back_at_once(self):
         self.record()  # an episode from an affected 26.924.22138 build

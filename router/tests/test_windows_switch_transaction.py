@@ -50,9 +50,9 @@ class WindowsSwitchTransactionTests(unittest.TestCase):
         self.assertEqual(kwargs['creationflags'], 0x08000000)
         return SimpleNamespace(returncode=0, stdout='codex-cli 0.163.0-alpha.11', stderr='')
 
-    def prove(self, root):
+    def prove(self, root, target):
         self.assertEqual(self.api.rows, {})
-        self.proofs.append(root)
+        self.proofs.append((root, target))
         return True
 
     def switch(self, **kwargs):
@@ -98,13 +98,13 @@ class WindowsSwitchTransactionTests(unittest.TestCase):
         loaded, restoring = self.partial_reopen()
         self.unchanged()
         self.assertEqual(restoring, [False])
-        self.assertEqual(loaded, ['switched', 'default'])
+        self.assertEqual(loaded, ['switched_signed_in', 'default'])
 
     def test_failed_proof_restores_original_crlf_bytes(self):
         self.before = self.before.replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
         self.config.write_bytes(self.before)
         with self.assertRaises(switcher.SwitchError):
-            self.switch(prove=lambda _: False)
+            self.switch(prove=lambda _root, _target: False)
         self.unchanged()
 
     def test_pending_partial_reopen_also_stops_before_restoring(self):
@@ -116,18 +116,19 @@ class WindowsSwitchTransactionTests(unittest.TestCase):
     def test_unverified_rollback_shutdown_keeps_the_marker_and_does_not_rewrite(self):
         _, restoring = self.partial_reopen(refuse_shutdown=True)
         self.assertEqual(restoring, [])
-        self.assertEqual(switcher._blocks.current(self.home), 'switched')
+        self.assertEqual(switcher._blocks.current(self.home), 'switched_signed_in')
         self.assertTrue((self.home / switcher.MARKER).exists())
 
     def test_pending_recovery_honors_matching_and_opposing_explicit_destinations(self):
-        for destination in ('switched', 'switched_back'):
+        for destination, written in (('switched', 'switched'),
+                                     ('switched_back', 'switched_back')):
             self.pending()
-            self.assertEqual(self.switch(target=destination), destination)
-            self.assertEqual(switcher._blocks.current(self.home), destination)
+            self.assertEqual(self.switch(target=destination), written)
+            self.assertEqual(switcher._blocks.current(self.home), written)
             self.assertFalse((self.home / switcher.MARKER).exists())
 
     def test_consent_ends_surviving_tray_workers_and_switches_both_directions(self):
-        self.assertEqual(self.switch(), 'switched')
+        self.assertEqual(self.switch(), 'switched_signed_in')
         self.assertEqual(set(self.api.ended), {10, 11})
         self.assertTrue(self.api.visible)
         prompt = self.confirm.call_args.args[0]
@@ -205,11 +206,11 @@ class WindowsSwitchTransactionTests(unittest.TestCase):
                 mock.patch.object(self.api, 'close_window', side_effect=closing), \
                 mock.patch.object(self.api, 'alive', side_effect=live), \
                 mock.patch.object(self.api, 'activate', side_effect=reopen):
-            self.assertEqual(self.switch(), 'switched')
+            self.assertEqual(self.switch(), 'switched_signed_in')
         self.assertEqual(len(self.proofs), 1)
         self.assertTrue(self.api.visible)
         self.assertEqual(self.api.ended, [])
-        self.assertEqual(switcher._blocks.current(self.home), 'switched')
+        self.assertEqual(switcher._blocks.current(self.home), 'switched_signed_in')
 
     def test_failed_reopen_restores_settings_and_reopens_the_original_connection(self):
         activate, calls = self.api.activate, []
@@ -262,11 +263,11 @@ class WindowsSwitchTransactionTests(unittest.TestCase):
         switcher._atomic.replace_json(self.home / switcher.MARKER,
                                       dict(to='switched', entry=previous))
         self.confirm.return_value = False
-        self.assertIsNone(self.switch(prove=lambda _: False))
+        self.assertIsNone(self.switch(prove=lambda _root, _target: False))
         self.assertTrue((self.home / switcher.MARKER).exists())
         self.assertEqual(self.api.closed, [])
         self.confirm.return_value = True
-        def refuse(_):
+        def refuse(_root, _target):
             self.assertEqual(self.api.rows, {})
             return False
         self.assertEqual(self.switch(prove=refuse), 'default')

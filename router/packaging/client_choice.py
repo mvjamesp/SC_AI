@@ -139,7 +139,10 @@ def attach_codex(home, state, mode, codex_config, previous=None,
     if previous is None:
         previous = codex_config.codex_attachment(home)
     config_path = Path.home() / '.codex' / 'config.toml'
-    block = _switch.build(home, state, mode, static_catalogue, _switch.recorded(previous))
+    variant = _switch.recorded(previous)
+    if previous.get('openai_mode') not in (None, mode):
+        variant = _switch.SWITCHED_BACK
+    block = _switch.build(home, state, mode, static_catalogue, variant)
     # Global instructions are install-once via the setup window's starter
     # choice: this installer never writes, rewrites, or re-enforces them.
     rules_receipt = previous.get('global_instructions')
@@ -157,7 +160,7 @@ def attach_codex(home, state, mode, codex_config, previous=None,
     event = previous.get('repair_notice') if after == before else None
     event = event or uuid.uuid4().hex
     codex_config.write_receipt(home, config_path, block, rules_receipt, mode, before,
-                               desktop=desktop, variant=previous.get('variant'),
+                               desktop=desktop, variant=variant if variant != _switch.DEFAULT else None,
                                reviewer=reviewer, repair_notice=event)
     entry = codex_config.codex_attachment(home)
     codex_config._owned.inspect(codex_config._owned.read(config_path), block)

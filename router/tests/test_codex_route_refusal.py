@@ -94,10 +94,12 @@ class SwitchedRouteTests(unittest.TestCase):
     def test_routed_models_are_forwarded_without_the_route_header(self):
         status, _, _, recorded = self._send(
             {'model': 'deepseek/deepseek-v4.1-flash-1017', 'input': []},
-            {'X-SCG-Codex-Route': 'routed'})
+            {'X-SCG-Codex-Route': 'routed', 'Authorization': 'Bearer subscription-secret'})
         self.assertEqual(status, 200)
         self.assertEqual([call[0] for call in recorded], ['openrouter.ai'])
-        self.assertNotIn(codex_route.HEADER, {name.lower() for name in recorded[0][4]})
+        upstream = {name.lower(): value for name, value in recorded[0][4].items()}
+        self.assertNotIn(codex_route.HEADER, upstream)
+        self.assertEqual(upstream['authorization'], 'Bearer test-key')
 
     def test_without_the_header_a_chatgpt_turn_is_forwarded_as_before(self):
         status, _, _, recorded = self._send({'model': 'gpt-6-astra', 'input': []})

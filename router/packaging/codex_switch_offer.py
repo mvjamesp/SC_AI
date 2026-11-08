@@ -6,10 +6,10 @@ ChatGPT allowance runs out. The router records each such episode in
 minute Express job included, reads it here and offers each of these at most
 once per episode:
 
-- Switch Codex, while the episode lasts and Codex still uses the ChatGPT
-  subscription, when the episode came from a build from `AFFECTED_FROM` up to
-  `FIXED_IN` and the installed ChatGPT app is not yet at `FIXED_IN`;
-- the way back, while Codex is switched, once the episode has ended or the
+- the signed-out Switch Codex fallback, while the episode lasts and Codex is
+  not already signed out, when the episode came from a build from
+  `AFFECTED_FROM` up to `FIXED_IN` and the installed app is not yet at `FIXED_IN`;
+- the way back, while Codex is signed out, once the episode has ended or the
   installed ChatGPT app is at or above `FIXED_IN`.
 
 The dialog is only the offer: its action opens the Switch Codex app, which
@@ -109,6 +109,16 @@ def episode(home):
     return {'seen_at': seen, 'end': end, 'version': parsed}
 
 
+def fallback_needed(home, now=None):
+    """True when this episode needs the signed-out route on the installed app."""
+    current = episode(home)
+    if current is None:
+        return False
+    now = time.time() if now is None else now
+    fixed = _version(FIXED_IN)
+    return now < current['end'] and (fixed is None or (installed() or ()) < fixed)
+
+
 def installed():
     """The installed ChatGPT app's version as a tuple, or None."""
     try:
@@ -138,16 +148,14 @@ def due(home, now=None, platform_name=None):
     current = episode(home)
     if not entry.get('inserted_block') or entry.get('openai_mode') == 'none' or current is None:
         return None
-    now = time.time() if now is None else now
     fixed = _version(FIXED_IN)
-    on_fixed = fixed is not None and (installed() or ()) >= fixed
     if _switch.recorded(entry) != _switch.SWITCHED:
         version = current['version']
         affected = (version is not None and version >= _version(AFFECTED_FROM)
                     and (fixed is None or version < fixed))
-        kind = SWITCH if affected and not on_fixed and now < current['end'] else None
+        kind = SWITCH if affected and fallback_needed(home, now) else None
     else:
-        kind = BACK if on_fixed or now >= current['end'] else None
+        kind = BACK if not fallback_needed(home, now) else None
     if kind is None or kind in _offered(home, current['seen_at']):
         return None
     return kind, current
@@ -160,13 +168,14 @@ def command(kind, icon):
         return None
     quote = lambda text: json.dumps(text, ensure_ascii=False)  # noqa: E731
     icon_clause = ' with icon (POSIX file %s)' % quote(icon) if icon else ' with icon note'
+    destination = _switch.SWITCHED if kind == SWITCH else _switch.SWITCHED_BACK
     return [tool, '-e', '\n'.join([
         'set answer to button returned of (display dialog %s with title %s '
         'buttons {%s, %s} default button %s cancel button %s%s)'
         % (quote(MESSAGES[kind]), quote(_notice.TITLE), quote(_notice.DISMISS),
            quote(OPEN), quote(OPEN), quote(_notice.DISMISS), icon_clause),
-        'if answer is %s then do shell script "/usr/bin/open " & quoted form of %s'
-        % (quote(OPEN), quote(str(APP)))])]
+        'if answer is %s then do shell script "/usr/bin/open " & quoted form of %s '
+        '& " --args --to %s"' % (quote(OPEN), quote(str(APP)), destination)])]
 
 
 def _remember(home, seen_at, offered):

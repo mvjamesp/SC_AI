@@ -380,7 +380,7 @@ def install_mac_app(target, bundle_id, python, home, launcher, extra=(), plist=N
         run(['/usr/bin/iconutil', '-c', 'icns', str(iconset), '-o',
              str(resources / 'router.icns')], check=True, capture_output=True, timeout=15)
         launch = home / launcher
-        executable.write_text('#!/bin/sh\nexec %s\n' % ' '.join(
+        executable.write_text('#!/bin/sh\nexec %s "$@"\n' % ' '.join(
             shlex.quote(str(part)) for part in (python, launch) + tuple(extra)))
         executable.chmod(0o755)
         (contents / 'Info.plist').write_bytes(plistlib.dumps({

@@ -10,6 +10,7 @@ import os
 import re
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -95,16 +96,22 @@ class SwitchFlowTests(unittest.TestCase):
         self.config.write_text(self.live + '\nowner_setting = 1\n')
 
     def prove(self, answer=True):
-        def prove(root):
-            self.proofs.append((root, self.config.read_text()))
+        def prove(root, target):
+            self.proofs.append((root, target, self.config.read_text()))
             return answer
         return prove
 
     def real_prove(self, **plan):
         """The shipped proof, asking a fake CLI inside the fake app."""
-        os.environ.update(FAKE_RECORD=str(self.root / 'env.json'), FAKE_PLAN=json.dumps(plan))
-        return lambda root: switcher._proof.prove(root, codex_home=self.root / 'home',
-                                                  timeout=10)
+        def prove(root, target):
+            planned = dict(plan)
+            if target == 'switched_signed_in':
+                planned.setdefault('account', {'type': 'chatgpt'})
+                planned.setdefault('requiresOpenaiAuth', True)
+            os.environ.update(FAKE_RECORD=str(self.root / 'env.json'), FAKE_PLAN=json.dumps(planned))
+            return switcher._proof.prove(root, codex_home=self.root / 'home', timeout=10,
+                                         signed_out=target == 'switched')
+        return prove
 
     def fake(self, **kwargs):
         return FakeApp(self.app, **kwargs)
@@ -123,17 +130,19 @@ class SwitchFlowTests(unittest.TestCase):
             self.assertEqual(app.calls[-1], ('open', 'com.openai.codex'))
 
     def test_round_trip_proves_only_switched_and_reopens_the_app(self):
-        for want in ('switched', 'switched_back', 'switched'):
+        for want in ('switched_signed_in', 'switched_back', 'switched_signed_in'):
             with self.subTest(want=want):
                 app, proofs = self.fake(), len(self.proofs)
                 self.assertEqual(self.run_switch(app), want)
                 self.assertEqual(app.calls, [('confirm', switcher.PROMPTS[want]),
                                              ('stop', 'com.openai.codex'),
                                              ('open', 'com.openai.codex')])
-                self.assertEqual(len(self.proofs), proofs + (want == 'switched'))
-                if want == 'switched':
+                self.assertEqual(len(self.proofs), proofs + (want == 'switched_signed_in'))
+                if want == 'switched_signed_in':
                     self.assertEqual(self.proofs[-1][0], str(self.app))
-                    self.assertIn('model_provider = "scg_router"', self.proofs[-1][1])
+                    self.assertEqual(self.proofs[-1][1], want)
+                    self.assertIn('model_provider = "scg_router"', self.proofs[-1][2])
+                    self.assertIn('requires_openai_auth = true', self.proofs[-1][2])
                 self.assertIn(PICK, self.config.read_text())
                 self.assertEqual(blocks.current(self.home), want)
                 self.assertFalse((self.home / switcher.MARKER).exists())
@@ -170,6 +179,57 @@ class SwitchFlowTests(unittest.TestCase):
         with self.assertRaisesRegex(switcher.SwitchError, 'nothing to switch'):
             self.run_switch(app)
         self.assertEqual(app.calls, [])
+
+    def test_explicit_no_subscription_destinations_never_report_a_false_transition(self):
+        self.attach('none')
+        for target in ('switched', 'switched_signed_in'):
+            with self.subTest(target=target):
+                app = self.fake()
+                with self.assertRaisesRegex(switcher.SwitchError, 'nothing to switch'):
+                    switcher.switch(self.home, target=target, platform_ops=app)
+                self.assertEqual(app.calls, [])
+                self.assertEqual(blocks.current(self.home), 'default')
+
+    def test_active_limit_uses_signed_out_fallback_and_normal_use_restores_sign_in(self):
+        now = datetime.now(timezone.utc)
+        (self.home / 'codex-usage-limit.json').write_text(json.dumps({
+            'seen_at': now.isoformat(),
+            'resets_at': (now + timedelta(hours=1)).isoformat(),
+            'client_version': '26.1103.41825'}))
+        app = self.fake()
+        self.assertEqual(self.run_switch(app), 'switched')
+        self.assertIn('requires_openai_auth = false', self.config.read_text())
+        self.assertEqual(app.calls[0], ('confirm', switcher.PROMPTS['switched']))
+        self.assertIn('stay separate', app.calls[0][1])
+        self.assertEqual(self.proofs[-1][1], 'switched')
+        (self.home / 'codex-usage-limit.json').unlink()
+        self.assertEqual(switcher.switch(self.home, platform_ops=app, ready=lambda _: True,
+                                         prove=self.prove(), target='switched_signed_in'),
+                         'switched_signed_in')
+        self.assertIn('requires_openai_auth = true', self.config.read_text())
+
+    def test_active_limit_moves_normal_openrouter_mode_to_the_fallback(self):
+        self.assertEqual(self.run_switch(self.fake()), 'switched_signed_in')
+        now = datetime.now(timezone.utc)
+        (self.home / 'codex-usage-limit.json').write_text(json.dumps({
+            'seen_at': now.isoformat(),
+            'resets_at': (now + timedelta(hours=1)).isoformat(),
+            'client_version': '26.1103.41825'}))
+        self.assertEqual(self.run_switch(self.fake()), 'switched')
+        self.assertIn('requires_openai_auth = false', self.config.read_text())
+
+    def test_explicit_fallback_needs_no_episode_and_normal_mode_restores_sign_in(self):
+        self.assertEqual(self.run_switch(self.fake()), 'switched_signed_in')
+        self.assertFalse((self.home / 'codex-usage-limit.json').exists())
+        app = self.fake()
+        self.assertEqual(switcher.switch(self.home, platform_ops=app, ready=lambda _: True,
+                                         prove=self.prove(), target='switched'),
+                         'switched')
+        self.assertIn('requires_openai_auth = false', self.config.read_text())
+        self.assertEqual(switcher.switch(self.home, platform_ops=app, ready=lambda _: True,
+                                         prove=self.prove(), target='switched_signed_in'),
+                         'switched_signed_in')
+        self.assertIn('requires_openai_auth = true', self.config.read_text())
 
     def test_switched_proof_objections_are_undone_and_the_app_reopened(self):
         for plan in ({'errors': ['configRequirements/read']},
@@ -243,7 +303,7 @@ class SwitchFlowTests(unittest.TestCase):
     def test_run_cut_short_is_kept_or_rolled_back_next_time(self):
         before = self.config.read_text()
         for after_writes, proves, want in ((False, True, 'default'), (True, False, 'default'),
-                                           (True, True, 'switched')):
+                                           (True, True, 'switched_signed_in')):
             with self.subTest(after_writes=after_writes, proves=proves):
                 self.cut_short(after_writes)
                 self.assertIsNone(self.run_switch(self.fake(confirm=False), answer=proves))
@@ -260,7 +320,7 @@ class SwitchFlowTests(unittest.TestCase):
                 self.assertIsNone(self.run_switch(app, answer=False))
                 self.assertEqual((blocks.current(self.home), len(self.proofs)), (want, proofs))
                 self.assertEqual(app.calls[0][1], switcher.PROMPTS[
-                    'switched' if want == 'switched_back' else 'switched_back'])
+                    'switched_signed_in' if want == 'switched_back' else 'switched_back'])
         (self.home / switcher.MARKER).write_text('{')
         with self.assertRaisesRegex(switcher.SwitchError, 'could not be finished'):
             self.run_switch(self.fake())

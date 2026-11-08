@@ -63,6 +63,13 @@ class VariantBlockTests(unittest.TestCase):
                     PROVIDER, requires_openai_auth=False,
                     http_headers={'x-scg-codex-route': 'routed',
                                   'x-openai-actor-authorization': 'Bearer tok'})}},
+            'switched_signed_in': {
+                'openai_base_url': URL, 'model_provider': 'scg_router',
+                'model_catalog_json': '/r/routed-models.json', 'approvals_reviewer': 'user',
+                'model_providers': {'scg_router': dict(
+                    PROVIDER, requires_openai_auth=True,
+                    http_headers={'x-scg-codex-route': 'routed',
+                                  'x-openai-actor-authorization': 'Bearer tok'})}},
             'switched_back': {
                 'openai_base_url': URL, 'approvals_reviewer': 'user',
                 'model_providers': {'scg_router': dict(PROVIDER, requires_openai_auth=True)}},
@@ -81,9 +88,13 @@ class VariantBlockTests(unittest.TestCase):
     def test_switched_back_without_a_subscription_keeps_one_provider(self):
         # That block already defines scg_router with sign-in off; a second
         # definition would make the whole config unreadable.
-        block = switch.build('/r', STATE, 'none', False, 'switched_back')
-        self.assertEqual(block, switch.build('/r', STATE, 'none', False, 'default'))
-        self.assertEqual(tomllib.loads(block)['model_providers']['scg_router']['base_url'], URL)
+        for variant in ('switched', 'switched_signed_in', 'switched_back'):
+            with self.subTest(variant=variant):
+                block = switch.build('/r', STATE, 'none', False, variant)
+                self.assertEqual(block, switch.build('/r', STATE, 'none', False, 'default'))
+                provider = tomllib.loads(block)['model_providers']['scg_router']
+                self.assertEqual(provider['base_url'], URL)
+                self.assertFalse(provider['requires_openai_auth'])
 
     def test_router_owned_names_match_their_owners(self):
         from ai_router import codex_route, routed_models
@@ -100,7 +111,7 @@ class ReceiptTests(unittest.TestCase):
             codex.write_receipt(home, '/c/config.toml', 'block', None, 'subscription', '')
             self.assertNotIn('variant', codex.codex_attachment(home))
             self.assertEqual(switch.current(home), 'default')
-            for variant in ('switched', 'switched_back'):
+            for variant in ('switched', 'switched_signed_in', 'switched_back'):
                 codex.write_receipt(home, '/c/config.toml', 'block', None, 'subscription',
                                     '', variant=variant)
                 self.assertEqual(codex.codex_attachment(home)['variant'], variant)
@@ -121,6 +132,16 @@ def _entry(home):
 
 @unix_only
 class SwitchFlowTests(unittest.TestCase):
+    def test_subscription_mode_round_trip_resets_variant_but_updates_preserve_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, config = self._attached(tmp)
+            switch.switch(home, 'switched_signed_in')
+            _install(self, tmp, home, '1.0.1', '--clients', 'codex', '--openai-mode', 'none')
+            self.assertFalse(tomllib.loads(config.read_text())['model_providers']['scg_router']['requires_openai_auth'])
+            _install(self, tmp, home, '1.0.2', '--clients', 'codex', '--openai-mode', 'subscription')
+            self.assertEqual(_entry(home)['variant'], 'switched_back')
+            self.assertNotIn('model_provider', tomllib.loads(config.read_text()))
+
     def _attached(self, tmp, *versions):
         home = Path(tmp) / 'home'
         for version in versions or ('1.0.0',):
@@ -148,7 +169,7 @@ class SwitchFlowTests(unittest.TestCase):
             config.write_text('approvals_reviewer = "auto_review"\n')
             home, config = self._attached(tmp)
             moved = {'removed': ['approvals_reviewer = "auto_review"']}
-            for variant in ('switched', 'switched_back', 'switched'):
+            for variant in ('switched', 'switched_signed_in', 'switched_back', 'switched'):
                 with self.subTest(variant=variant):
                     switch.switch(home, variant)
                     lines = [line for line in config.read_text().splitlines()
@@ -159,7 +180,8 @@ class SwitchFlowTests(unittest.TestCase):
     def test_updates_keep_switched_and_switched_back(self):
         with tempfile.TemporaryDirectory() as tmp:
             home, config = self._attached(tmp)
-            for variant, version in (('switched', '1.0.1'), ('switched_back', '1.0.2')):
+            for variant, version in (('switched', '1.0.1'),
+                                     ('switched_signed_in', '1.0.2'), ('switched_back', '1.0.3')):
                 with self.subTest(variant=variant):
                     switch.switch(home, variant)
                     switched = config.read_text()
@@ -174,7 +196,7 @@ class SwitchFlowTests(unittest.TestCase):
             edited = config.read_text().replace('openai_base_url', 'openai_base_url_edited')
             config.write_text(edited)
             with self.assertRaisesRegex(SystemExit, 'edited by hand'):
-                _install(self, tmp, home, '1.0.3')
+                _install(self, tmp, home, '1.0.4')
             self.assertEqual(config.read_text(), edited)
 
     def test_switch_writes_block_and_receipt_together_and_rolls_back(self):
@@ -228,13 +250,16 @@ def _real_remover(cmd, **kwargs):
 
 @unix_only
 class SwitchedRefusalTests(unittest.TestCase):
-    def test_detach_uninstall_service_only_and_rollback_refuse_while_switched(self):
+    def test_signed_in_detach_uninstall_service_only_and_rollback_refuse(self):
+        self.test_detach_uninstall_service_only_and_rollback_refuse_while_switched('switched_signed_in')
+
+    def test_detach_uninstall_service_only_and_rollback_refuse_while_switched(self, variant='switched'):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / 'home'
             fakehome = {'HOME': str(Path(tmp) / 'fakehome')}
             _install(self, tmp, home, '1.0.0')
             config, _, _, _ = _install(self, tmp, home, '1.0.1')
-            switch.switch(home, 'switched')
+            switch.switch(home, variant)
             switched, receipt = config.read_text(), _receipt(home)
             remover = subprocess.run(
                 [sys.executable, str(DISABLE)], capture_output=True, text=True,
