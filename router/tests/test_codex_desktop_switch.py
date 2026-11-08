@@ -180,15 +180,17 @@ class SwitchFlowTests(unittest.TestCase):
             self.run_switch(app)
         self.assertEqual(app.calls, [])
 
-    def test_explicit_no_subscription_destinations_never_report_a_false_transition(self):
+    def test_no_subscription_normal_selection_is_a_noop_but_fallback_is_refused(self):
         self.attach('none')
-        for target in ('switched', 'switched_signed_in'):
-            with self.subTest(target=target):
-                app = self.fake()
-                with self.assertRaisesRegex(switcher.SwitchError, 'nothing to switch'):
-                    switcher.switch(self.home, target=target, platform_ops=app)
-                self.assertEqual(app.calls, [])
-                self.assertEqual(blocks.current(self.home), 'default')
+        app = self.fake()
+        before = (self.config.read_bytes(), (self.home / 'activation.json').read_bytes())
+        self.assertEqual(switcher.switch(self.home, target='switched_signed_in', platform_ops=app),
+                         'switched_signed_in')
+        with self.assertRaisesRegex(switcher.SwitchError, 'nothing to switch'):
+            switcher.switch(self.home, target='switched', platform_ops=app)
+        self.assertEqual(app.calls, [])
+        self.assertEqual((self.config.read_bytes(), (self.home / 'activation.json').read_bytes()), before)
+        self.assertEqual(blocks.current(self.home), 'default')
 
     def test_active_limit_uses_signed_out_fallback_and_normal_use_restores_sign_in(self):
         now = datetime.now(timezone.utc)
