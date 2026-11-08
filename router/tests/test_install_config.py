@@ -153,9 +153,11 @@ class InstallConfigTests(unittest.TestCase):
             config, _, _, _ = _install(
                 self, tmp, home, '1.0.2', '--openai-mode', 'subscription')
             block = config.read_text()
-            self.assertIn('openai_base_url = ', block)
-            self.assertNotIn('model_provider', block)
-            self.assertIn('approvals_reviewer = "user"', block)
+            doc = tomllib.loads(block)
+            self.assertIn('openai_base_url', doc)
+            self.assertNotIn('model_provider', doc)
+            self.assertTrue(doc['model_providers']['scg_router']['requires_openai_auth'])
+            self.assertEqual(doc['approvals_reviewer'], 'user')
 
     def test_update_plist_carries_home_without_feed_pin(self):
         # --feed is one-shot: it selects this run's source but must not pin

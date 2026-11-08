@@ -7,6 +7,8 @@
   and explain when projects and setup choices stay separate.
 - Preserve existing OpenRouter variants during updates. Verify the expected
   account state and never forward ChatGPT credentials to OpenRouter.
+- Keep the selected OpenRouter-only action harmless on installs without a
+  ChatGPT subscription.
 
 ## 1.3.40
 

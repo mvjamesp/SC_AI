@@ -339,11 +339,12 @@ choices stay separate until you switch back. On Mac, SCG Router adds Switch Code
 Applications folder when Codex uses your ChatGPT subscription and your ChatGPT
 app is affected.
 
-When the limit is reached, SCG Router offers to switch once. Choose **Open
-Switch Codex**, or open Switch Codex from your Applications folder at any time.
-Switch Codex asks before it changes anything, then quits and reopens the
-ChatGPT app. It keeps the switch only after Codex has loaded the new settings,
-so a switch that fails changes nothing.
+When a limit is recorded, SCG Router offers to switch once. Choose **Open
+Switch Codex** in that notice, or choose **OpenRouter for usage limits** from
+the SCG Router menu. If there is no notice, use the menu: the shortcut alone
+may select a different connection. Switch Codex asks before it changes
+anything, then quits and reopens the ChatGPT app. It keeps the switch only
+after Codex has loaded the new settings, so a switch that fails changes nothing.
 
 On Windows, closing the window can leave Codex running in the tray.
 The confirmation explains that Codex will fully close and running tasks will stop.

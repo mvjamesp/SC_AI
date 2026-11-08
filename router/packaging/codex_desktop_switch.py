@@ -196,7 +196,9 @@ def _switch(home, run, ops, prove, ready, record, target=None):
         raise SwitchError(_blocks.EDITED) from exc
     if current is None:
         raise SwitchError(_blocks.NOT_CONNECTED)
-    if target in ROUTED_VARIANTS and entry.get('openai_mode') == 'none':
+    if target == SWITCHED_SIGNED_IN and entry.get('openai_mode') == 'none':
+        return target
+    if target == SWITCHED and entry.get('openai_mode') == 'none':
         raise SwitchError(NOTHING_TO_SWITCH)
     if target in ROUTED_VARIANTS:
         if current == target:

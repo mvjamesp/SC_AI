@@ -60,8 +60,15 @@ class DesktopManagementTests(unittest.TestCase):
         case.attach('none')
         before = (case.config.read_bytes(), (case.home / 'activation.json').read_bytes())
         app = case.fake()
-        self.assertEqual(codex_fixtures.switcher.switch(case.home, target='switched',
-                         platform_ops=app), 'switched')
+        control = module('desktop_control')
+        real_owner = codex_fixtures.switcher
+        owner = SimpleNamespace(switch=lambda home, target: real_owner.switch(
+            home, target=target, platform_ops=app))
+        native_load = control.load
+        with mock.patch.object(control, 'load', side_effect=lambda name:
+                owner if name == 'codex_desktop_switch' else native_load(name)):
+            self.assertEqual(control.execute(case.home, case.root, 'codex.openrouter'),
+                             {'outcome': 'done'})
         self.assertEqual(app.calls, [])
         self.assertEqual((case.config.read_bytes(), (case.home / 'activation.json').read_bytes()), before)
 
