@@ -1,13 +1,10 @@
 """Claude desktop gateway adapter (Plan 073). Python 3.9-safe helper.
 
-Owns the four owned inference values merged into the third-party
-profile's applied configLibrary entry, plus that profile's
-deploymentMode, with conflict refusal on hand-edited owned values and
-activation receipt handling. Mirrors the claude_config.py discipline:
-private before image, atomic replacement at mode 600, owned values only,
-receipt entry recording the pre-attach snapshot, and an exact detach.
-Loaded through the installer's explicit file-import pattern and shipped
-in the release bundle. No runtime/protocol import here.
+Owns the four inference values in the third-party profile's applied entry
+and that profile's deploymentMode. Hand-edited owned values refuse changes.
+Like claude_config.py, it retains prior values in the activation receipt,
+writes atomically at mode 600 and restores only owned settings on detach.
+Loaded through the installer's explicit file imports; no protocol imports.
 """
 import base64
 import binascii
@@ -42,14 +39,11 @@ PROVIDER_VALUE = 'gateway'
 CREDENTIAL_KIND_VALUE = 'static'
 # Placeholder: the router authorises on the loopback path token, not this.
 API_KEY_VALUE = 'router-path-token'
-
 CLIENT_KEY = 'claude-desktop'
 # The only 0.6 Switch Claude shim, which setup copied into the router home.
 OLD_SWITCH_SHIM_SHA256 = '0948115fe1971013cb14dafae2ffadbcf3e95dc16d460b5c68426d740975be5c'
 
-
 PROFILE_DIRNAME = 'Claude-3p'
-
 
 def profile_root(env=None, platform_name=None):
     """Parent of the app's userData directory, the way Electron resolves it.
@@ -70,7 +64,6 @@ def profile_root(env=None, platform_name=None):
     xdg = env.get('XDG_CONFIG_HOME')
     return Path(xdg) if xdg else Path.home() / '.config'
 
-
 def user_data_dir(env=None, platform_name=None):
     """Third-party profile: explicit override, Windows local data, then Electron."""
     env = os.environ if env is None else env
@@ -82,13 +75,11 @@ def user_data_dir(env=None, platform_name=None):
         return Path(env['LOCALAPPDATA']) / PROFILE_DIRNAME
     return profile_root(env, platform_name) / PROFILE_DIRNAME
 
-
 def desired_values(state):
     return {PROVIDER_KEY: PROVIDER_VALUE,
             CREDENTIAL_KIND_KEY: CREDENTIAL_KIND_VALUE,
             BASE_URL_KEY: 'http://127.0.0.1:%s/%s' % (state['port'], state['token']),
             API_KEY_KEY: API_KEY_VALUE}
-
 
 def applied_entry_path(data_dir):
     """Applied configLibrary entry selected by _meta.json/appliedId."""
@@ -185,11 +176,12 @@ def sealed(value, prefix='__sealed__:v1:'):
         return False
 
 
-def operational_snapshot(home, state, entry, receipts):
+def operational_snapshot(home, state, entry, receipts, *, observed_bytes=None):
     """Prove this install's route; a seal alone, without this proof, grants no restore authority."""
     conflict = _removal._json.Conflict
     receipt_path = receipts.receipt_path_for(home)
-    raw = _removal.read(receipt_path)
+    receipt_bytes = receipt_path.read_bytes() if receipt_path.exists() else None
+    raw = receipt_bytes.decode('utf-8') if receipt_bytes is not None else None
     receipt = _removal._json.document(raw or '{}')
     if (receipt_path.is_symlink() or receipt.get('version') != 2
             or not isinstance(receipt.get('clients'), dict)
@@ -209,7 +201,8 @@ def operational_snapshot(home, state, entry, receipts):
         raise conflict('connection_changed')
     meta_path, config_path = path.parent / '_meta.json', path.parents[1] / 'claude_desktop_config.json'
     state_path = Path(home) / 'mixed-router-state.json'
-    texts = {p: _removal.read(p) for p in (meta_path, path, config_path, state_path)}
+    captured = {p: p.read_bytes() if p.exists() else None for p in (meta_path, path, config_path, state_path)}
+    texts = {p: value.decode('utf-8') if value is not None else None for p, value in captured.items()}
     saved_state = _removal._json.document(texts[state_path] or '{}')
     if any(saved_state.get(key) != state.get(key) for key in ('port', 'token')):
         raise conflict('connection_changed')
@@ -227,8 +220,10 @@ def operational_snapshot(home, state, entry, receipts):
     value = current.get(API_KEY_KEY)
     if value != API_KEY_VALUE and not sealed(value):
         raise conflict('connection_changed')
-    for target, before in {receipt_path: raw, **texts}.items():
+    for target, before in {receipt_path: receipt_bytes, **captured}.items():
         atomic_write.check_unchanged(target, before)
+    if observed_bytes is not None:
+        observed_bytes.update(captured)
     return previous
 
 
@@ -314,6 +309,8 @@ def attach(home, state, receipts, data_dir_override=None, env=None, *, python=No
     with a redacted message. Records the attachment in the versioned
     receipt. Returns the applied entry path written.
     """
+    if os.path.lexists(Path(home) / '.claude-profile-rotation-pending.json'):
+        raise SystemExit('Choose Claude in SCG Router to recover the saved profile before setup.')
     data_dir = (Path(data_dir_override) if data_dir_override is not None
                 else user_data_dir(env))
     existing = receipts.read_receipt(home).get('clients', {}).get(CLIENT_KEY)

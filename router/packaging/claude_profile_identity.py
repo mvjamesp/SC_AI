@@ -20,6 +20,18 @@ UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 # Default organization observed in Claude 2.9939.2's static-gateway local stores.
 STATIC_ORGANIZATION = '00000000-0000-4000-8000-000000000001'
 BINDING = '.claude-profile-control-identity.json'
+OWNER = '.claude-profile-control-owner.json'
+
+
+def native_digest(first, account):
+    """Current subscription account, without retaining its identifier in metadata."""
+    return hashlib.sha256(json.dumps([str(Path(first).resolve()), account]).encode()).hexdigest()
+
+
+def pair_digest(first, native, third, gateway):
+    identity = json.dumps([str(Path(first).resolve()), native[0],
+                           str(Path(third).resolve()), gateway[0]])
+    return hashlib.sha256(identity.encode()).hexdigest()
 
 
 def _uuid(value):
@@ -57,9 +69,13 @@ def bind_profile_accounts(home, first, third):
     native, gateway = subscription(first), third_party(third)
     if not native or not gateway:
         return None
-    identity = json.dumps([str(Path(first).resolve()), native[0],
-                           str(Path(third).resolve()), gateway[0]])
-    digest = hashlib.sha256(identity.encode()).hexdigest()
+    try:
+        owner = _read_object(Path(third) / OWNER)
+    except FileNotFoundError:
+        owner = None
+    if owner is not None and owner != {'version': 1, 'account': native_digest(first, native[0])}:
+        return False
+    digest = pair_digest(first, native, third, gateway)
     path = Path(home) / '.claude-profile-control-accounts.json'
     try:
         saved = _read_object(path)

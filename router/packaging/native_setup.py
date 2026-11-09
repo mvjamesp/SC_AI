@@ -163,7 +163,7 @@ def _claude_on_openrouter(home, dialog):
     restarts Claude and shares saved tasks; it does nothing when already there."""
     owner = load('claude_desktop_switch')
     try:
-        if owner.switch(home, target='3p') is not None:
+        if owner.switch(home, target='3p') == '3p':
             return True
         dialog.message('Claude stays on your Claude subscription. To use OpenRouter models, '
                        'choose Claude, then OpenRouter, in the SCG Router menu.')

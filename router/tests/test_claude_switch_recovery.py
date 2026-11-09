@@ -67,7 +67,22 @@ def report(**counts):
 
 
 class SwitchRecoveryTests(unittest.TestCase):
-    setUp = launch.ProfileLaunchTests.setUp  # An attached gateway profile, selected (3p).
+    def setUp(self):
+        launch.ProfileLaunchTests.setUp(self)
+        first = fixtures.profile(desktop_config.profile_root(self.env), 'Claude', A1, O1)
+        identity = fixtures.load_helper('claude_profile_sync')._records._identity
+        native = mock.patch.object(identity, 'subscription', side_effect=fixtures.subscription_identity)
+        self.native = native.start()
+        self.addCleanup(native.stop)
+        # Each action loads its context independently; simulate only native sign-in.
+        context = switcher._sync_context
+        def verified(*args, **kwargs):
+            value = context(*args, **kwargs)
+            value[0]._records._identity.subscription = identity.subscription
+            return value
+        mock.patch.object(switcher, '_sync_context', side_effect=verified).start()
+        self.first = first
+        switcher._accounts.claim(self.profile, identity.native_digest(first, A1))
 
     def switch(self, platform, sync):
         return switcher.switch(self.home, policy_check=lambda: False, sync=sync,
@@ -79,7 +94,9 @@ class SwitchRecoveryTests(unittest.TestCase):
     def use_real_setup_check(self):
         """Only a subscription Code task can record the binding; none exists yet."""
         self.initialized.side_effect = REAL_INITIALIZED
-        fixtures.profile(desktop_config.profile_root(self.env), 'Claude', A1, O1)
+        self.native.side_effect = None
+        self.native.return_value = None
+        (self.profile / switcher._accounts.OWNER).unlink()
         (self.profile / 'config.json').write_text(json.dumps({'lastKnownAccountUuid': A3}))
         fixtures.third_party_identity(self.profile, A3, O3)
 
@@ -90,7 +107,8 @@ class SwitchRecoveryTests(unittest.TestCase):
         self.assertEqual(self.switch(platform, sync), '1p')
         sync.assert_not_called()
         self.assertEqual((self.mode(), self.events), ('1p', ['confirm', 'stop', 'open']))
-        self.assertIn('setup only', platform.messages[0])
+        self.assertIn('without sharing tasks', platform.prompts[0])
+        self.assertEqual(platform.messages, [])
 
     def test_subscription_user_is_asked_for_a_code_task_before_claude_quits(self):
         self.use_real_setup_check()
@@ -106,7 +124,7 @@ class SwitchRecoveryTests(unittest.TestCase):
         # Found 20/10/2026: once connecting stopped selecting OpenRouter, a subscription
         # user with saved tasks was told to open a Code task, which could never help:
         # only Claude's first OpenRouter launch creates the gateway identity.
-        root = fixtures.profile(desktop_config.profile_root(self.env), 'Claude', A1, O1)
+        root = self.first
         fixtures.record(root, CODE, A1, O1, 'subscription-task')
         self.initialized.side_effect = lambda _sync, roots: len(roots) == 1
         self.config.write_text(json.dumps({'deploymentMode': '1p'}))
@@ -120,9 +138,13 @@ class SwitchRecoveryTests(unittest.TestCase):
         shutil.rmtree(root / CODE)
         self.initialized.side_effect = lambda _sync, roots: False
         self.config.write_text(json.dumps({'deploymentMode': '1p'}))
+        self.native.side_effect = None
+        self.native.return_value = None
         platform = Platform(self.events)
-        self.assertEqual(self.switch(platform, sync), '3p')
-        self.assertIn('open a Code task', platform.messages[0])
+        self.events.clear()
+        with self.assertRaisesRegex(switcher.SwitchError, 'Open a Code task'):
+            self.switch(platform, sync)
+        self.assertEqual(self.events, [])
 
     def test_claude_that_did_not_close_in_time_is_reopened_unchanged(self):
         for opens, suffix in ((True, ''), (False, ' Open Claude to continue.')):

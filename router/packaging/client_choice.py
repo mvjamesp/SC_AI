@@ -47,6 +47,15 @@ def validate(args):
         raise SystemExit('--claude-mode conflicts with --anthropic-mode')
 
 
+def require_recovered(home, *, automatic=False):
+    if os.path.lexists(Path(home) / '.claude-profile-rotation-pending.json'):
+        if automatic:
+            print('deferred: recover the saved Claude profile in SCG Router before updating')
+            return False
+        raise SystemExit('Choose Claude in SCG Router to recover the saved Claude profile before setup or repair.')
+    return True
+
+
 def resolve(args, home, state, receipts, write_state, repair=False):
     """Explicit additions, then attached clients, saved choice, and legacy Codex."""
     validate(args)
@@ -207,6 +216,7 @@ def attach_current(args, home, *, codex, desktop, claude, write_state, resolve,
     if args.dry_run:
         print('would connect the selected clients to the installed router')
         return 0
+    require_recovered(home)
     state = ensure_state(home)
     previous = state.copy()
     _, clients, _, mode = resolve(args, home, state)

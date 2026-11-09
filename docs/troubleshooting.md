@@ -311,6 +311,16 @@ follow its message; keep your original tasks in place.
 Mac Code-task sharing has passed recorded round trips. Cowork tasks and cloud chats
 remain separate. See [Claude desktop setup and limits](claude-code.md#claude-desktop-app).
 
+If your Claude account changed, choosing OpenRouter offers a separate profile.
+Confirm the restart to keep the previous profile and tasks in a private archive
+and start clean. Nothing from that earlier profile is shared into the new one.
+You can also return to your subscription without sharing the earlier tasks.
+If Claude asks you to open a Code task first, do that on your subscription so
+the current account can be verified. Do not delete account bindings or history.
+If recovery was interrupted, choose Claude in SCG Router again. Recovery asks
+before restarting and returns to your subscription. A conflict retains the
+saved data and leaves Claude closed; contact IT rather than forcing it open.
+
 ## I have no Claude subscription access
 
 Choose **No subscription** for the Claude question in the key window. From a

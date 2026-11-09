@@ -43,6 +43,9 @@ load packaging/claude_desktop_platform.py
 load packaging/claude_desktop_switch.py
 load packaging/claude_profile_rules.py
 load packaging/claude_profile_identity.py
+load packaging/claude_profile_rotation.py
+load packaging/claude_profile_accounts.py
+load packaging/claude_profile_permissions.py
 load packaging/claude_profile_records.py
 load packaging/claude_profile_publish.py
 load packaging/claude_profile_transaction.py

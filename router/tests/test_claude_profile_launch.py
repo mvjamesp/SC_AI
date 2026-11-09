@@ -16,13 +16,11 @@ from tests import claude_profile_sync_fixtures as fixtures
 from tests.install_fixtures import install_mod
 from tests.test_claude_desktop_config import _profile, _state, desktop_config
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
     'desktop_switch_launch_test', ROOT / 'packaging' / 'claude_desktop_switch.py')
 switcher = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(switcher)
-
 
 class FakePlatform:
     def __init__(self, events, running=False, confirm=True, stopped=True):
@@ -30,26 +28,30 @@ class FakePlatform:
         self.running = running
         self.confirm_result = confirm
         self.stopped_result = stopped
-
     def is_running(self, _platform, run=None):
         return self.running
-
     def confirm(self, _message, _platform, run=None):
         self.events.append('confirm')
         return self.confirm_result
-
     def request_stop(self, _platform, run=None):
         self.events.append('stop')
         return self.stopped_result
-
     def open_app(self, _platform, run=None):
         self.events.append('open')
-
     def show_message(self, _message, _platform, run=None):
         pass
 
-
 class ProfileLaunchTests(unittest.TestCase):
+    def known_native(self):
+        native = ('12345678-1234-4567-8123-123456789abc', 'abcdefab-1234-4567-8123-123456789abc')
+        original = switcher._sync_context
+        def context(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result[0]._records._identity.subscription = lambda _first: native
+            switcher._accounts.claim(self.profile, result[0]._records._identity.native_digest(result[2][0], native[0]))
+            return result
+        return mock.patch.object(switcher, '_sync_context', side_effect=context)
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -95,7 +97,7 @@ class ProfileLaunchTests(unittest.TestCase):
 
     def test_start_preserves_mode_and_opens_without_sync(self):
         for running in (False, True):
-            with self.subTest(running=running), mock.patch.object(
+            with self.subTest(running=running), self.known_native(), mock.patch.object(
                     switcher._desktop, 'write_json') as write:
                 self.events.clear()
                 self.assertEqual(switcher.switch(
@@ -113,7 +115,7 @@ class ProfileLaunchTests(unittest.TestCase):
             return {'copied': 0, 'replaced': 0, 'unchanged': 0,
                     'pending': 0, 'failed': 1, 'errors': ['ValueError']}
 
-        with mock.patch.object(switcher._desktop, 'write_json') as write:
+        with self.known_native(), mock.patch.object(switcher._desktop, 'write_json') as write:
             with self.assertRaisesRegex(switcher.SwitchError, 'not fully shared'):
                 switcher.switch(
                     self.home, action='switch', policy_check=lambda: False,
@@ -131,7 +133,7 @@ class ProfileLaunchTests(unittest.TestCase):
             return {'copied': 0, 'replaced': 0, 'unchanged': 1,
                     'pending': 1, 'failed': 0, 'errors': []}
 
-        with self.assertRaisesRegex(switcher.SwitchError, 'waiting for Claude setup'):
+        with self.known_native(), self.assertRaisesRegex(switcher.SwitchError, 'waiting for Claude setup'):
             switcher.switch(self.home, policy_check=lambda: False,
                             sync=pending_sync, platform_ops=platform_ops)
         self.assertEqual(self.events, ['confirm', 'stop', 'sync:3p', 'open'])
@@ -140,9 +142,10 @@ class ProfileLaunchTests(unittest.TestCase):
     def test_initialization_only_open_migrates_nothing(self):
         self.initialized.return_value = False
         sync = mock.Mock()
-        self.assertEqual(switcher.switch(
-            self.home, action='start', policy_check=lambda: False, sync=sync,
-            platform_ops=FakePlatform(self.events)), '3p')
+        with self.known_native():
+            self.assertEqual(switcher.switch(
+                self.home, action='start', policy_check=lambda: False, sync=sync,
+                platform_ops=FakePlatform(self.events)), '3p')
         sync.assert_not_called()
         self.assertEqual(self.events, ['open'])
 
@@ -194,6 +197,9 @@ class ProfileLaunchTests(unittest.TestCase):
             path: fixtures.fingerprint(path / 'creds')
             for path in (first, third)
         }
+        with mock.patch.object(fixtures.sync._records._identity, 'subscription',
+                               side_effect=fixtures.subscription_identity):
+            fixtures.sync._records._identity.bind_profile_accounts(self.home, first, third)
         shared = {}
         for profile_path, title, result, account, org in (
                 (third, 'third', 'third-result', '87654321-4321-4567-8123-123456789abc',

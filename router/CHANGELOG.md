@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Switch Claude safely after an account change. Keep the complete earlier
+  OpenRouter profile, tasks and recovery settings in a private archive, then
+  prepare a separate profile for the current account after restart consent.
+  Interrupted recovery keeps Claude closed until the saved profile is restored.
+  Removal and reattachment remain available before the next OpenRouter switch.
+
 - Keep ChatGPT projects and setup state when switching to OpenRouter during
   normal use. Preserve the signed-out fallback for an active usage limit,
   and explain when projects and setup choices stay separate.
@@ -11,9 +17,11 @@
   ChatGPT subscription.
 - Let removal detach Claude desktop after Claude seals its saved gateway
   placeholder, once the same route, receipt and profile checks used for
-  updates all pass. A changed route still refuses before anything changes.
+  updates all pass. Retain an exact private copy of the opaque entry first.
+  Refuse changes to the route, selected profile or receipt before publication.
 - Reinstall after removal instead of reporting the removed release as up to
-  date and stopping at "could not verify the current router".
+  date and stopping at "could not verify the current router". Report an incomplete
+  saved-version cleanup for retry, including an already-removed Linux service.
 
 ## 1.3.40
 

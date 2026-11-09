@@ -328,6 +328,8 @@ def sync_profiles(home, winner, env=None):
             accounts = _records._identity.bind_profile_accounts(home, first, third)
             if accounts is False:
                 return _report(pending=1, errors=['account-binding-changed'])
+            if accounts is None:
+                return _report(pending=1, errors=['identity-unresolved'])
         except (OSError, ValueError, TypeError):
             return _report(1, ['account-binding-refused'])
         # Retire the other copy of a task deleted since the last clean sync

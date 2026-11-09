@@ -1,5 +1,6 @@
 """Restore an absent Codex block under its active receipt, never recreate authority."""
 import json
+import os
 import re
 import sys
 import uuid
@@ -32,7 +33,8 @@ def offer(home, service):
 def reconcile(home, service, *, apply=True):
     """Read-only preflight; applying a repair requires install.lock and repeats all checks."""
     home = Path(home)
-    if any((home / name).exists() for name in ('.router-removed', 'codex-switch-pending.json')):
+    if any(os.path.lexists(home / name) for name in (
+            '.router-removed', 'codex-switch-pending.json', '.claude-profile-rotation-pending.json')):
         return 'deferred'
     blocks, atomic = load('codex_switch_config'), load('atomic_write')
     codex, owned = blocks._codex, blocks._codex._owned

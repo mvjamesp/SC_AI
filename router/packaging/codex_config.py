@@ -431,15 +431,17 @@ def parse_snapshot(text):
 
 
 def receipt_path_for(home):
-    """The one activation receipt under a router home (single-name owner)."""
     return Path(home) / RECEIPT_NAME
 
 
+def replace_receipt(home, raw, *, expected):
+    """Compare and publish a journaled receipt generation without reformatting it."""
+    _atomic_write.replace_bytes(receipt_path_for(home), raw, expected=expected)
+
+
 def write_client_receipt(home, client, entry):
-    """Record one client attachment; other attachments are preserved."""
-    # The single activation.json writer (Plan 095): entry builders stay in
-    # each adapter, this function stays dumb. Always stamps the version so
-    # a fresh single-client home reads back as attached, never legacy.
+    if os.path.lexists(Path(home) / '.claude-profile-rotation-pending.json'):
+        raise SystemExit('Choose Claude in SCG Router to recover the saved Claude profile before changing connections.')
     doc = read_receipt(home) or {'version': RECEIPT_VERSION, 'clients': {}}
     doc['version'] = RECEIPT_VERSION
     doc.setdefault('clients', {})[client] = entry
@@ -475,12 +477,13 @@ def write_receipt(home, config_path, block, rules_receipt, mode, before='',
 
 
 def codex_attachment(home):
-    """The codex attachment, or {} when never attached."""
     return read_receipt(home).get('clients', {}).get('codex', {})
 
 
 def drop_client(home, client, expected=None):
     """Forget a proven attachment; refuse concurrent receipt changes."""
+    if os.path.lexists(Path(home) / '.claude-profile-rotation-pending.json'):
+        raise SystemExit('Choose Claude in SCG Router to recover the saved Claude profile before changing connections.')
     receipt_path = receipt_path_for(home)
     before = _owned.read(receipt_path) if receipt_path.exists() else None
     doc = read_receipt(home)

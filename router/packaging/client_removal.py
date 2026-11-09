@@ -5,6 +5,7 @@ keeps the service running and leaves each remaining attachment's receipt.
 """
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 
 
@@ -50,8 +51,32 @@ def saved_values(entry, keys, legacy_keys=()):
         raise SystemExit('Assistant connection conflict: damaged_receipt.') from None
 
 
+def _preserved_entry(home, path, before):
+    """Retain opaque bytes without claiming knowledge of their plaintext."""
+    privacy = _load('service').load('router_removal_privacy',
+        Path(__file__).resolve().parents[1] / 'ai_router' / 'winacl.py')
+    permissions = _load('claude_profile_permissions')
+    permissions.require_private_parent(Path(home))
+    if os.name == 'nt':
+        privacy.require_owner_only(Path(home))
+    raw = path.read_bytes()
+    _atomic.check_unchanged(path, before)
+    archive = Path(home) / ('claude-desktop-before-' + hashlib.sha256(raw).hexdigest() + '.json')
+    if archive.is_symlink():
+        raise _json.Conflict('connection_changed')
+    old = archive.read_bytes() if archive.exists() else None
+    if old is not None:
+        privacy.require_owner_only(archive)
+        permissions.require_private_parent(archive, directory=False)
+        if old != raw:
+            raise _json.Conflict('connection_changed')
+    return archive, old, raw
+
+
 def json_plan(home, client, entry, receipts=None):
     """The same narrow proof serves standalone detach and all-client removal."""
+    if os.path.lexists(Path(home) / '.claude-profile-rotation-pending.json'):
+        raise _json.Conflict('profile_recovery_pending')
     path = entry_path(entry)
     owner = _load('claude_config' if client == 'claude' else 'claude_desktop_config')
     previous = _snapshot(entry, owner.OWNED_KEYS, getattr(owner, 'LEGACY_KEYS', ()))
@@ -73,44 +98,75 @@ def json_plan(home, client, entry, receipts=None):
         written = {key: value for key, value in written.items() if key in previous}
     if client == 'claude' and owner.FIRST_PARTY_KEY in previous:
         written = dict(written, **{owner.FIRST_PARTY_KEY: '1'})
-    before = read(path)
+    before, guards, archive = read(path), {}, None
     if (client == 'claude-desktop' and receipts is not None and before is not None
             and owner.sealed(seal := _json.document(before).get(owner.API_KEY_KEY))):
-        # Claude desktop seals the placeholder key at startup. Only the full
-        # operational proof (this install's route, receipt and profile) makes
-        # the seal ours to restore; left behind, it would refuse a reinstall.
+        # The route proof cannot identify sealed plaintext. Keep the exact
+        # entry before restoring the connection, so no opaque value is lost.
         state = _json.document(read(Path(home) / 'mixed-router-state.json') or '{}')
         try:
-            owner.operational_snapshot(home, state, entry, receipts)
+            owner.operational_snapshot(home, state, entry, receipts, observed_bytes=guards)
         except ValueError as exc:  # the owner raises its own module's Conflict class
             raise _json.Conflict(str(exc)) from None
+        _atomic.check_unchanged(path, before)
+        archive = _preserved_entry(home, path, before)
         written = dict(written, **{owner.API_KEY_KEY: seal})
     after = _json.restore(before if before is not None else '{}',
                           ('env',) if client == 'claude' else (), written, previous)
-    files = [(path, before, after if before is not None else None)]
+    config = path.parents[1] / 'claude_desktop_config.json' if client == 'claude-desktop' else None
+    files = [archive] if archive is not None else []
+    files += [(target, text, text) for target, text in guards.items() if target not in (path, config)]
+    files.append((path, before, after if before is not None else None))
     if client == 'claude-desktop':
         if path.parent.name != 'configLibrary' or 'deploymentMode' not in previous:
             raise _json.Conflict('damaged_receipt')
-        config = path.parents[1] / 'claude_desktop_config.json'
+        # Keep this selection guard on retries too, after the seal is already restored.
+        meta = path.parent / '_meta.json'
+        selected = meta.read_bytes() if meta.exists() else None
+        library = _json.document(selected.decode('utf-8') if selected is not None else '{}')
+        if library.get('appliedId') != path.stem or library.get('hybridPointer'):
+            raise _json.Conflict('connection_changed')
+        if meta not in guards:
+            files.insert(0, (meta, selected, selected))
         old = read(config)
+        if config in guards:
+            _atomic.check_unchanged(config, guards[config])
         if old is not None:
             doc = _json.document(old)
             # A selection made after attachment belongs to the person.
             updated = (_json.restore(old, (), {'deploymentMode': '3p'}, previous)
                        if doc.get('deploymentMode') == '3p' else old)
             files.append((config, old, updated))
+        elif config in guards:
+            files.append((config, None, None))
     return files
 
 
 def apply(files):
+    # Read-only proof inputs and every write target must still match before
+    # publication. Recheck proof inputs after writes before dropping a receipt.
+    for path, before, _ in files:
+        _atomic.check_unchanged(path, before)
+    retained = [(path, after) for path, _, after in files if isinstance(after, bytes)]
     for path, before, after in files:
         target = path.resolve()
+        for saved, raw in retained:
+            if saved != path:
+                _atomic.check_unchanged(saved, raw)
         if before != after:
-            _atomic.replace_text(target, after, newline='', expected=before)
+            if isinstance(after, bytes):
+                # Publish only complete private bytes, without replacing a competing copy.
+                _load('claude_profile_permissions').require_private_parent(path.parent)
+                _load('claude_profile_rotation')._exclusive(path, after)
+            else:
+                _atomic.replace_text(target, after, newline='', expected=before)
         else:
             _atomic.check_unchanged(target, before)
-        if path.resolve() != target or read(path) != after:
+        actual = path.read_bytes() if isinstance(after, bytes) else read(path)
+        if path.resolve() != target or actual != after:
             raise _atomic.ConcurrentChange('Settings changed concurrently; retry removal.')
+    for path, _, after in files:
+        _atomic.check_unchanged(path, after)
 
 
 def detach_json(home, client, receipts, entry=None):
@@ -124,6 +180,8 @@ def detach_json(home, client, receipts, entry=None):
 
 
 def preflight(home, receipts):
+    if os.path.lexists(Path(home) / '.claude-profile-rotation-pending.json'):
+        raise SystemExit('Choose Claude in SCG Router to recover the saved profile before removal.')
     path = receipts.receipt_path_for(home)
     raw = read(path)
     if raw is not None:

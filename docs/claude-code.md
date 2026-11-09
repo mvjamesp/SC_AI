@@ -378,11 +378,12 @@ Mac setup retains **Open Claude** and **Switch Claude** recovery launchers.
 **Switch Claude** asks for confirmation,
 lets Claude exit normally, shares local tasks using the old selection as the
 conflict winner, rechecks settings and that Claude is still closed, changes only
-`deploymentMode`, and reopens Claude. A second launcher request is refused until
+`deploymentMode` for an unchanged account pair, and reopens Claude. A changed
+account uses the recovery flow below instead. A second launcher request is refused until
 the first finishes, so it cannot copy from an outdated selection.
 **Cancel** leaves everything alone. If Claude does not finish closing within
-about a minute, or you cancel its quit prompt, nothing changes and Claude
-reopens if it had closed. Task sharing runs only when switching; ordinary
+about a minute, or you cancel its quit prompt, nothing changes. Claude reopens
+only when the selected profile still matches the current account. Task sharing runs only when switching; ordinary
 app launches and router startup leave histories alone. Setup and updates preserve the selected mode.
 A standalone Claude Code terminal installation is not required for the
 desktop app. If the installed router predates these launchers, setup keeps
@@ -398,11 +399,11 @@ files. Cowork tasks (`local-agent-mode-sessions`) stay in their own profile in
 this beta. Cloud conversations are not local session files and
 are outside this transfer. The desktop adapter's `detach` operation restores
 the original profile settings when the receipt proves each current value.
-A sealed gateway value cannot meet that restoration check. Detach then leaves
-the settings and receipt untouched. Full removal also stops before detaching
-any assistant or uninstalling services. A ready connection does not mean
-removal is safe; sealed-setting removal needs a separately verified repair.
-When restoration is proven, full removal also detaches Codex and the terminal client.
+A sealed gateway value cannot prove its original plaintext. When the route,
+selected profile and receipt still match, removal first retains an exact private
+copy of that entry. It then restores only the owned settings. A changed proof or
+failed retention keeps the receipt and service available for retry. When
+restoration is proven, full removal also detaches Codex and the terminal client.
 
 Task sharing preserves `sessionId` and `cliSessionId`, keeps workspace paths
 outside the profiles unchanged, and retains tasks that exist in only one
@@ -410,9 +411,43 @@ profile. Only the resolved current account in each profile participates, and
 in the subscription profile only its current organization. Previous accounts'
 tasks and other organizations' tasks remain separate, including any unreadable
 old records.
+Before the first OpenRouter launch with a Claude subscription, open a Code task
+on that subscription so Router can verify and retain the current account choice.
+Without a subscription, the separate OpenRouter profile does not share tasks.
 After the first copy, sharing is tied to that pair of accounts. Signing into a
 different account stops sharing so it cannot inherit the earlier account's
-gateway copies. Return to the original account to resume sharing.
+gateway copies. Choosing OpenRouter offers a separate profile for the current
+account. After confirmation and shutdown, the router retains the complete old
+gateway profile, its sharing binding and ledger in a private sibling archive.
+It prepares a clean profile at Claude's original supported location. Claude
+creates the new gateway identity; the router never copies or invents it.
+Choosing the subscription can return without sharing the old gateway tasks.
+Cancel changes nothing. The Open Claude launcher checks the same boundary when
+OpenRouter is selected; direct app launches do not run the router's account check.
+
+Recovery archives use `.Claude-3p.rotation-<id>.archive` beside `Claude-3p`.
+They retain the old profile under `profile`, along with its activation receipt,
+router-state before-image, account binding and ledger when present. They are
+not imported into the new profile or removed by an update. An interrupted
+transition leaves a private pending marker. Choose Claude in SCG Router again
+to recover the old attachment and return to the subscription. A recovery
+conflict keeps the saved data and leaves Claude closed; contact IT.
+Recovery finishes the subscription selection before clearing its pending marker.
+Scheduled update status does not block it, but changed connection settings do.
+Recover before setup, repair or rolling back Router. Then choose OpenRouter again to switch;
+recovery does not count as that switch.
+Scheduled updates wait for recovery without counting the hold as a failed release.
+Finished archives are retained evidence, not an automatic restore option. IT
+must verify the original account before reactivating one. Do not copy an older
+profile into the current account or delete its saved receipt and sharing data.
+
+A newly separated pair shares only the verified current account's tasks.
+Each task authorizes its exact CLI session transcript from `.claude/projects`
+or its existing bundle; unrelated shared histories are not imported. This is
+task separation, not isolation between people sharing one operating-system
+login. Claude's explicit terminal-history import remains outside the router's
+transfer boundary. Use separate operating-system accounts when separate
+people need confidentiality.
 When both profiles contain the same session, the profile selected
 before a switch wins conflicting record fields and files. Unique files from
 both bundles remain, and task files keep their exact bytes. If the two

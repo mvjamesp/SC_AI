@@ -29,10 +29,31 @@ class DesktopProfileTransitionTests(fixtures.SyncFixture):
             open_app=mock.Mock(return_value=SimpleNamespace(returncode=0)), show_message=mock.Mock())
         self.enterContext(mock.patch.object(self.owner, '_sync_context',
             return_value=(fixtures.sync, self.env, (self.first, self.third))))
+        self.sync()  # Bind the known synthetic pair before it holds any tasks.
 
     def transition(self, target):
         return self.owner.switch(self.home, target=target, platform_ops=self.platform,
             policy_check=lambda: False, sync=lambda home, mode, third, env: self.sync(mode))
+
+    def test_legacy_pair_without_owner_opens_without_restart_or_task_sharing(self):
+        self.assertFalse((self.third / self.owner._accounts.OWNER).exists())
+        fixtures.record(self.first, 'claude-code-sessions',
+            '12345678-1234-4567-8123-123456789abc', 'abcdefab-1234-4567-8123-123456789abc',
+            'unsynced-native-task', bundle_files={'outputs/keep.txt': 'do not share on Open'})
+        for action in ('start', 'switch'):
+            with self.subTest(action=action):
+                for control in vars(self.platform).values():
+                    control.reset_mock()
+                with mock.patch.object(self.owner, '_sync_profiles') as share:
+                    result = self.owner.switch(self.home, action=action, target='3p',
+                        platform_ops=self.platform, policy_check=lambda: False)
+                self.assertEqual(result, '3p')
+                share.assert_not_called()
+                self.platform.confirm.assert_not_called()
+                self.platform.request_stop.assert_not_called()
+                self.assertEqual(self.platform.open_app.call_count, 1 if action == 'start' else 0)
+                self.assertFalse(self.paths(self.third, 'claude-code-sessions', 'unsynced-native-task'))
+                self.assertFalse((self.third / self.owner._accounts.OWNER).exists())
 
     def test_both_profile_directions_preserve_saved_tasks_and_account_binding(self):
         before_receipt = (self.home / 'activation.json').read_bytes()
@@ -113,10 +134,12 @@ class DesktopProfileTransitionTests(fixtures.SyncFixture):
         fixtures.namespace(self.first, 'claude-code-sessions', first_config['lastKnownAccountUuid'],
                            first_config['lastKnownOrganizationUuid'])
         before = fixtures.fingerprint(self.third)
-        with self.assertRaisesRegex(self.owner.SwitchError, 'different account'):
-            self.transition('1p')
-        self.assertEqual(fixtures.fingerprint(self.third), before)
+        self.assertEqual(self.transition('1p'), '1p')
+        expected = tuple(row for row in before if row[0] != 'claude_desktop_config.json')
+        self.assertEqual(tuple(row for row in fixtures.fingerprint(self.third)
+                               if row[0] != 'claude_desktop_config.json'), expected)
         self.assertEqual(binding.read_bytes(), before_binding)
+        self.assertIn('without sharing tasks', self.platform.confirm.call_args.args[0])
 
 
 class NativeProfileRecoveryTests(fixtures.PairFixture):
@@ -143,6 +166,7 @@ class SetupHandOffTests(unittest.TestCase):
         facts = dict(serving=True, update={}, onboarding=dict(ready=False, clients={'claude-desktop': dict(
             plugins_available=True, fresh_session_confirmed=False, reply_seen=False)}))
         for outcome, message in ((None, 'stays on your Claude subscription'),
+                                 ('1p', 'stays on your Claude subscription'),
                                  (refused('Open a Code task in Claude, then try again.'), 'Open a Code task'),
                                  ('3p', None)):
             with self.subTest(outcome=outcome):

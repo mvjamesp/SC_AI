@@ -681,10 +681,13 @@ credential kind and full loopback URL. Duplicate JSON keys, changed routes,
 bootstrap settings and invalid modes refuse. Repeated opaque attachment keeps
 the entry and receipt bytes unchanged. Classification and every switch recheck
 use this proof; it proves routing ownership, never decrypted plaintext.
-`client_removal.json_plan` restores an opaque value only after this same proof
-passes for the receipt being removed; without it, or on a changed route, the
-value still blocks detach and all-client removal preflight. Left behind, a seal
-would make a later attach refuse, so a proven removal restores it.
+`client_removal.json_plan` restores an opaque field only after this route proof
+passes and an exact private entry copy is retained under Router home. The
+opaque plaintext is never inferred. Saved state and selected-entry metadata
+remain comparison guards until publication finishes. Changed proof inputs keep
+the receipt and service available for a safe retry. A failed current-version
+pointer cleanup reports incomplete removal, while retained releases stay.
+Linux retry does not disable units already removed by the earlier attempt.
 `desktop_windows.py` resolves the current user's registered Claude Store
 package and its virtualized roaming profile; the gateway profile stays separate.
 `windows_native.py` binds package, process, token and window APIs with explicit
@@ -702,13 +705,17 @@ job to close workers before remaining verified survivors are ended.
 and progress. The helper owns presentation; Python owns consent and configuration.
 `claude_desktop_switch.py` owns the switch lifecycle. After Claude exits normally,
 it shares the current account's local tasks and changes the mode only when all
-required copies succeed. Open and Switch share one transition lock, held before
-reading the mode through reopening, so overlapping requests cannot use a stale
-source profile. The switch rechecks the attachment, managed policy and stopped
-app before changing the mode. The mode write also compares the exact settings
+required copies succeed. `claude_profile_accounts.py` checks the current native
+account before restart consent and again after shutdown. A changed account
+retains the complete old gateway profile through `claude_profile_rotation.py`
+instead of reassigning its task-sharing binding. Open and Switch share one
+transition lock, held before reading the mode through reopening, so overlapping
+requests cannot use a stale source profile. The switch rechecks the attachment,
+managed policy and stopped app before changing the mode. The mode write compares the exact settings
 bytes to preserve concurrent edits. When setup recorded no Claude subscription,
 it refuses a move to the subscription before asking or closing Claude, and the
-menu disables that choice. Open Claude leaves histories alone. The stable
+menu disables that choice. Open Claude does not share tasks, but checks account
+ownership before opening an existing OpenRouter profile. The stable
 `claude_profile_launch.py` follows the installed release pointer so both actions
 survive updates and release pruning. After a rollback to a release without task
 sharing it runs that release's plain switch, opens Claude for Open Claude and
@@ -751,6 +758,23 @@ A private router-local hash binds the account pair so a later sign-in cannot
 inherit the previous account's copied tasks; the same hash keys the shared-task
 ledger. The coordinator must hold both profile locks before creating that
 binding; this helper does not start a copy.
+
+`claude_profile_rotation.py` is a closed-app retention primitive. The caller owns
+consent, account decisions and both profile locks. It retains the complete old
+profile and control before-images before preparing a clean same-root profile.
+A private pending marker requires explicit recovery before either profile opens.
+Receipt publication stays with `codex_config.replace_receipt`, which compares
+the exact generation. Unknown account pairs stop sync before any task effects.
+The native permission leaf rejects macOS extended allow rules on the archive
+parent; Windows uses the existing owner-only ACL check. Shared parents refuse
+before creating recovery state. Control copies and final markers use local
+publication and removal, so separate home mounts do not require a rename.
+Rotation and recovery also validate Router home's access before publishing private
+files. Recovery preserves live update-status fields while requiring all connection
+and unknown settings to match the saved configuration. It publishes the subscription
+selection before clearing pending work; rollback refuses until recovery finishes.
+Setup and repair refuse before shared receipts or client choices can change while
+Claude recovery is pending.
 
 `claude_profile_publish.py` and `claude_profile_transaction.py` share the record
 and bundle publication contract. They validate file generations before exclusive

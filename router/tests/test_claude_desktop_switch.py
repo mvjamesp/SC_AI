@@ -11,7 +11,6 @@ from unittest import mock
 
 from tests.test_claude_desktop_config import _profile, _state, desktop_config
 from tests.install_fixtures import install_mod
-
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
     'desktop_switch', ROOT / 'packaging' / 'claude_desktop_switch.py')
@@ -51,6 +50,9 @@ class SwitchTests(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(switcher.sys, 'platform', 'darwin').start()
         mock.patch.object(switcher, '_initialized', return_value=True).start()
+        mock.patch.object(switcher._accounts, 'plan', return_value={
+            'rotate': False, 'return_only': False, 'native': None,
+            'gateway': None, 'binding': {'accounts': 'a' * 64}, 'owner': None, 'history': False}).start()
         mock.patch.object(switcher._platform, 'is_running', return_value=False).start()
         mock.patch.object(switcher._platform, 'request_stop', side_effect=lambda *_a, **_k:
                           self.run(['quit'], timeout=65).stdout == 'stopped').start()
@@ -59,11 +61,9 @@ class SwitchTests(unittest.TestCase):
         self.run = mock.Mock(side_effect=[result('button returned:Continue'),
                                           result('stopped'), result()])
         self.policy = mock.Mock(return_value=False)
-
     def files(self):
         return {p.relative_to(self.root): p.read_bytes()
                 for p in self.root.rglob('*') if p.is_file()}
-
     def switch(self):
         return switcher.switch(
             self.home, run=self.run, policy_check=self.policy,

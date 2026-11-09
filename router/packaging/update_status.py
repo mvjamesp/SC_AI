@@ -4,6 +4,7 @@ Python 3.9-safe. Read-only summaries never persist state or contact a service.
 """
 import calendar
 import hashlib
+import json
 import re
 import time
 
@@ -15,6 +16,17 @@ ERROR_CODES = (
 FEED_ERRORS = ('feed_unreachable', 'feed_invalid', 'feed_serial', 'feed_untrusted', 'feed_signature')
 COMPONENTS = ('controller', 'updater_launcher', 'scheduler', 'assistants', 'controls', 'controls_launchers')
 MISSED_AFTER = 2 * 4 * 60 * 60 + 15 * 60
+STATUS_FIELDS = frozenset((
+    'last_check_at', 'last_successful_check_at', 'latest_verified', 'last_error',
+    'update_failure_streak', 'update_failures', 'update_failure_context',
+    'last_applied_version', 'component_repairs', 'installation_repair_required',
+))
+
+
+def configuration(state):
+    """Exclude only update-report fields; unknown settings remain significant."""
+    return json.dumps({key: value for key, value in state.items() if key not in STATUS_FIELDS},
+                      sort_keys=True)
 
 
 def version(value):

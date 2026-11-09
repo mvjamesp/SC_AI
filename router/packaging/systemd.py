@@ -142,7 +142,9 @@ class Manager:
     def uninstall(self):
         self.ctl('disable', '--now', EXPRESS_TIMER, check=False)
         self.ctl('stop', EXPRESS_UPDATE, check=False)
-        self.ctl('disable', '--now', TIMER, SERVICE)
+        present = tuple(unit for unit in (TIMER, SERVICE) if (self.units / unit).is_file())
+        if present:
+            self.ctl('disable', '--now', *present)
         self.ctl('stop', UPDATE, check=False)
         for name in (SERVICE, UPDATE, TIMER, EXPRESS_UPDATE, EXPRESS_TIMER):
             (self.units / name).unlink(missing_ok=True)

@@ -89,13 +89,16 @@ def self_test(python, release_dir, run=None):
         raise SystemExit('bundle self-test failed')
 
 
-def _clear_current(home):
+def _clear_current(home, *, required=False):
     current = home / 'current'
     try:
         if current.is_symlink() or current.is_file():
             current.unlink()
+        if required and (current.exists() or current.is_symlink()):
+            raise OSError('current pointer remains')
     except OSError:
-        pass
+        if required:
+            raise SystemExit('Services removed; saved version could not be cleared; retry removal.') from None
 
 
 def ensure_credentials(home, state, env=None, protect=None, provider_keys=None):
@@ -229,6 +232,8 @@ def do_rollback(args, *, platform_backend, restart_router, wait_version,
     if args.dry_run:
         print(f'would roll back to {args.version} under {home}')
         return 0
+    if os.path.lexists(home / '.claude-profile-rotation-pending.json'):
+        raise SystemExit('Choose Claude in SCG Router to recover the saved Claude profile before rollback.')
     platform_backend().check(home)
     target = home / 'releases' / args.version
     if not target.is_dir() or not (target / 'packaging' / 'VERSION').exists():

@@ -1,8 +1,7 @@
 """Start or switch the attached Claude app without signing either profile out.
 
-Only deploymentMode changes. Claude must finish quitting before the atomic
-write, and the attachment is checked again afterwards to preserve app edits.
-The installer owns attachment; this helper never creates or removes one.
+Claude must finish quitting before publication. An account change retains the
+old gateway profile before preparing a clean one; it never rebinds old tasks.
 """
 import argparse
 import importlib.util
@@ -23,8 +22,10 @@ def _load(name):
 
 _desktop = _load('claude_desktop_config')
 _receipts = _load('codex_config')
+_receipts._atomic_write = _desktop.atomic_write
 _platform = _load('claude_desktop_platform')
 _service = _load('service')
+_accounts = _load('claude_profile_accounts')
 TITLE = 'SCG Router'
 BUNDLE_ID = 'com.anthropic.claudefordesktop'
 LAUNCHER_ID = 'com.softwarecombined.router.claude-switch'
@@ -161,8 +162,6 @@ def switch(home, *, run=subprocess.run, policy_check=None, action='switch',
         raise SwitchError('Unknown Claude action.')
     if _service.fcntl is None and _service.msvcrt is None:
         raise SwitchError('Claude could not be opened safely. Try again.')
-    # The copy lock ends before mode publication. Hold this lock across the
-    # whole transition so another launcher cannot copy using a stale mode.
     with _service.install_lock(home) as installation:
         if not installation:
             raise SwitchError('SCG Router is already updating or switching. Try again shortly.')
@@ -176,55 +175,86 @@ def switch(home, *, run=subprocess.run, policy_check=None, action='switch',
 
 def _run_action(home, *, run, policy_check, action, sync, platform_ops, profile_env, target=None):
     platform_ops = _platform if platform_ops is None else platform_ops
+    if _accounts.pending(home):
+        try:
+            recovered = _accounts.recovery(home, _receipts, platform_ops, sys.platform, run,
+                lambda third: _sync_context(home, third, profile_env), attached_profile, policy_check)
+        except Exception as exc:
+            raise SwitchError('Claude profile recovery could not finish. Your saved profiles '
+                              'were kept. Leave Claude closed and contact IT.') from exc
+        if recovered is not None and action == 'switch' and target != recovered:
+            raise SwitchError('Claude was recovered on your subscription. Choose OpenRouter again to switch.')
+        return recovered
     config, before = attached_profile(home)
     if policy_check is None:
         policy_check = lambda: platform_ops.policy_disabled(
-            sys.platform, run=run, profile=config.parent)
+            sys.platform, run=run, profile=_accounts.policy_root(home, _receipts, config.parent))
     current_mode = before['deploymentMode']
-    if action == 'switch' and target == current_mode:
-        return current_mode
-    if action == 'start':
-        try:
-            _open(platform_ops, run)
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise SwitchError('Claude could not open. Open Claude to continue.') from exc
-        return current_mode
-    mode = target or ('1p' if current_mode == '3p' else '3p')
+    mode = (current_mode if action == 'start' else
+            target or ('1p' if current_mode == '3p' else '3p'))
     subscription = subscription_chosen(home)
+    if current_mode == '1p' and (action == 'start' or target == current_mode):
+        if action == 'start': _open(platform_ops, run)  # Keep native sign-in; never change selection.
+        return current_mode
     if mode == '1p' and not subscription:
         raise SwitchError(NO_SUBSCRIPTION)
     try:
         context = _sync_context(home, config.parent, profile_env)
         if policy_check() is not False:
             raise SwitchError('Your organization manages how Claude connects. Contact your administrator.')
-        setup_only = _setup_only(context, current_mode, subscription)  # Refuse while Claude is still open.
-        # The subscription side is identified, so only Claude's first OpenRouter launch is missing.
+        account = _accounts.plan(home, context, mode, subscription=subscription)
+        first_claim = mode == '3p' and account['native'] and account['owner'] is None and account['binding'] is None
+        if not first_claim and not account['rotate'] and (action == 'start' or target == current_mode):
+            if action == 'start':
+                _open(platform_ops, run)
+            return current_mode
+        setup_only = (account['rotate'] or account['return_only']
+                      or _setup_only(context, current_mode, subscription))
         first_gateway = setup_only and mode == '3p' and _initialized(context[0], context[2][:1])
         prompt = ('Switch Claude to %s? Claude will restart.' if setup_only else
                   'Switch Claude to %s? Claude will restart after sharing your saved tasks.')
-        if not platform_ops.confirm(prompt % DESTINATIONS[mode], sys.platform, run=run):
+        if account['rotate']:
+            prompt = ('Create a separate OpenRouter profile for your current Claude account? '
+                      'Claude will restart. Your previous profile and tasks will be kept, not shared.')
+        elif account['return_only']:
+            prompt = ('Return to your Claude subscription without sharing tasks? '
+                      'Claude will restart. Your OpenRouter tasks will stay in their previous profile.')
+        if not platform_ops.confirm(prompt % DESTINATIONS[mode] if '%s' in prompt else prompt,
+                                    sys.platform, run=run):
             return None
         if platform_ops.request_stop(sys.platform, run=run) is not True:
-            # Claude may have partly quit, so reopen it before refusing.
+            if not _accounts.can_reopen(home, context, attached_profile, subscription):
+                raise SwitchError('Claude account changed. Choose Claude in SCG Router to try again.')
             raise _reopened('Claude did not close in time. Finish your work and try again.',
                             platform_ops, run)
-    except (OSError, ValueError, subprocess.SubprocessError, SystemExit) as exc:
+    except ValueError as exc:
+        raise SwitchError(str(exc)) from exc
+    except (OSError, subprocess.SubprocessError, SystemExit) as exc:
         raise SwitchError('Claude settings or status could not be checked. Try again.') from exc
     try:
         initialization_only, unshared = _share_and_select(
             home, config, current_mode, mode, run=run, policy_check=policy_check,
-            sync=sync, platform_ops=platform_ops, profile_env=profile_env)
+            sync=sync, platform_ops=platform_ops, profile_env=profile_env, consent=account)
     except Exception as exc:
-        # Claude has quit. Reopen it unchanged so a refusal or error never leaves it closed.
+        if _accounts.pending(home):
+            raise SwitchError('Claude profile recovery is pending. Choose Claude in SCG Router '
+                              'again to recover your saved profile. Claude will stay closed.') from exc
         message = (str(exc) if isinstance(exc, SwitchError)
                    else 'Claude tasks were not fully shared. Try again.')
+        if not _accounts.can_reopen(home, context, attached_profile, subscription):
+            raise SwitchError(message + ' Claude will stay closed. Choose Claude in SCG Router to try again.') from exc
         raise _reopened(message, platform_ops, run) from exc
     try:
         _open(platform_ops, run)
     except (OSError, subprocess.SubprocessError) as exc:
         raise SwitchError('Claude is ready in %s. Open Claude to continue.'
                           % DESTINATIONS[mode]) from exc
-    if initialization_only and not subscription:
+    if account['rotate']:
+        _notice('Claude opened with a separate OpenRouter profile. Your previous profile '
+                'and tasks were kept. No tasks from that profile were shared.', platform_ops, run)
+    elif account['return_only']:
+        pass  # The restart confirmation already explains that these tasks stay separate.
+    elif initialization_only and not subscription:
         pass  # Without a subscription there are no tasks to share and no next step.
     elif initialization_only and first_gateway:
         _notice('Claude opened on OpenRouter for the first time, so your saved Code tasks '
@@ -242,9 +272,13 @@ def _run_action(home, *, run, policy_check, action, sync, platform_ops, profile_
 
 
 def _share_and_select(home, config, current_mode, mode, *, run, policy_check, sync,
-                      platform_ops, profile_env):
+                      platform_ops, profile_env, consent):
     """With Claude closed, share tasks and recheck every guard before saving the mode."""
     third = config.parent
+
+    def closed():
+        if policy_check() is not False or platform_ops.is_running(sys.platform, run=run) is not False:
+            raise SwitchError('Claude settings or status changed. Try again.')
     try:
         if platform_ops.is_running(sys.platform, run=run) is not False:
             raise SwitchError('Claude stayed open. Finish your work and try again.')
@@ -259,7 +293,14 @@ def _share_and_select(home, config, current_mode, mode, *, run, policy_check, sy
         raise SwitchError('Claude settings or status could not be checked. Try again.') from exc
     try:
         # Checked again now that Claude has quit; the answer decides what runs.
-        initialization_only = _setup_only(context, current_mode, subscription_chosen(home))
+        account = _accounts.plan(home, context, mode, subscription=subscription_chosen(home))
+        if account != consent:
+            raise SwitchError('Claude account changed. Try switching again.')
+        if account['rotate']:
+            _accounts.rotate(home, context, _receipts, account, closed)
+            current_mode = '1p'  # A clean retained replacement starts on the safe mode.
+        initialization_only = (not subscription_chosen(home) or account['rotate'] or account['return_only']
+                               or _setup_only(context, current_mode, subscription_chosen(home)))
         report = ({'failed': 0, 'pending': 0} if initialization_only else
                   (sync if sync is not None else _sync_profiles)(
                       home, current_mode, third, profile_env))
@@ -276,9 +317,20 @@ def _share_and_select(home, config, current_mode, mode, *, run, policy_check, sy
             raise SwitchError('Some Claude tasks are waiting for Claude setup.')
     except SwitchError:
         raise
+    except ValueError as exc:
+        raise SwitchError(str(exc)) from exc
     except Exception as exc:
         raise SwitchError('Claude tasks were not fully shared. Try again.') from exc
-    # Re-read after sync as well: preserve unrelated edits and refuse a new selection.
+    # Re-read after sharing/rotation; consent never carries across an account change.
+    latest_account = _accounts.plan(home, context, mode, subscription=subscription_chosen(home))
+    if (latest_account['native'] != consent['native'] or latest_account['rotate'] or
+            not account['rotate'] and any(latest_account[key] != consent[key]
+                for key in ('gateway', 'owner')) or
+            not account['rotate'] and consent['binding'] is not None
+                and latest_account['binding'] != consent['binding']):
+        raise SwitchError('Claude account changed. Try switching again.')
+    if mode == '3p' and latest_account['native'] and latest_account['owner'] is None:
+        _accounts.claim_current(home, context, latest_account, closed)
     before = config.read_bytes() if config.exists() else None
     latest_config, current = attached_profile(home)
     if latest_config != config or current['deploymentMode'] != current_mode:

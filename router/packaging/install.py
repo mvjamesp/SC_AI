@@ -196,7 +196,6 @@ def do_rollback(args):
 
 
 def _sync_seams():
-    """Mirror _patch_attrs swaps from install_mod onto _svc call sites."""
     global run, health, wait_version, ensure_serving
     run, health, wait_version, ensure_serving = (
         _svc.run, _svc.health, _svc.wait_version, _svc.ensure_serving)
@@ -278,6 +277,9 @@ def _open_key_window(python, home, setup_url, clients):
 
 
 def do_install(args, _fetch=fetch, _run=None):
+    if not args.dry_run and not _client_choice.require_recovered(
+            Path(args.home).expanduser(), automatic=os.environ.get('ROUTER_AUTOMATIC_UPDATE') == '1'):
+        return 0
     _svc._feed.configure_home(Path(args.home).expanduser())
     return _delivery.run_install(args, lambda delivery: _do_install(args, _fetch, _run, delivery),
         run=lambda *a, **kw: run(*a, **kw), fetch=None if _fetch is fetch else _fetch)
@@ -362,12 +364,8 @@ def _do_install(args, _fetch=fetch, _run=None, delivery=None):
         raise SystemExit('Repair cancelled; run setup again when your assistants are ready.')
     client, clients, _, mode = _resolve_clients_and_modes(args, home, state, repair=repair)
     python = _codex_config._owned.PYTHON = _delivery.activate(home, delivery, python)
-    # First-run window: the router boots keyless on a single-use link and
-    # the operator pastes one key there instead of into the terminal. TTL
-    # mirrors ai_router.setup.SETUP_TTL_S; kept literal so the 3.9-compatible
-    # installer never imports the router package. --setup forces the window;
-    # otherwise a fresh install arms it whenever the installed service has
-    # no service-visible key.
+    # Keep first-run keys in the window. TTL mirrors setup.SETUP_TTL_S without
+    # importing runtime code on Python 3.9; --setup or a keyless service arms it.
     missing = provider_keys().unhandled(home, state, _diag._key_private)
     env_named = [defn.key.env for defn in missing
                  if os.environ.get(defn.key.env, '').strip()]
@@ -570,7 +568,7 @@ def do_uninstall(args):
     if _codex_config.read_receipt(home).get('clients'):
         raise SystemExit('Attachments remain; services left running. Retry removal.')
     backend.uninstall(home)
-    _bundle._clear_current(home)  # releases stay; setup again reinstalls, not "up to date"
+    _bundle._clear_current(home, required=True)  # releases stay for recovery
     _delivery._load('native_shortcuts').remove(home)  # also closes the menu
     print(f'uninstalled services; {home} left in place for the operator to delete')
     return 0
