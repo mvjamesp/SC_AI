@@ -92,11 +92,15 @@ class RemovalRecoveryTests(unittest.TestCase):
                 self.assertRaisesRegex(SystemExit, 'Removed: Codex. Remaining: Claude Code'):
             self.remove()
         self.backend.uninstall.assert_not_called()
+        self.assertTrue((self.home / 'current').exists())
         self.assertEqual(set(self.owner.read_receipt(self.home)['clients']), {'claude'})
         self.assertNotIn('openai_base_url', self.config.read_text())
         self.assertEqual(self.remove(), 0)
         self.backend.uninstall.assert_called_once()
         self.assertFalse((self.home / 'activation.json').exists())
+        # Setup run again must reinstall, not report the removed release as up to date.
+        self.assertFalse((self.home / 'current').exists())
+        self.assertTrue((self.home / 'releases/1.2.6.174').is_dir())
         self.assertEqual(json.loads(self.settings.read_text())['tools'], {'disabled': True})
 
     def test_interrupted_receipt_removal_can_retry_a_restored_codex(self):

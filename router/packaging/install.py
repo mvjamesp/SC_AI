@@ -570,6 +570,7 @@ def do_uninstall(args):
     if _codex_config.read_receipt(home).get('clients'):
         raise SystemExit('Attachments remain; services left running. Retry removal.')
     backend.uninstall(home)
+    _bundle._clear_current(home)  # releases stay; setup again reinstalls, not "up to date"
     _delivery._load('native_shortcuts').remove(home)  # also closes the menu
     print(f'uninstalled services; {home} left in place for the operator to delete')
     return 0

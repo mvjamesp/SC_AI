@@ -681,8 +681,10 @@ credential kind and full loopback URL. Duplicate JSON keys, changed routes,
 bootstrap settings and invalid modes refuse. Repeated opaque attachment keeps
 the entry and receipt bytes unchanged. Classification and every switch recheck
 use this proof; it proves routing ownership, never decrypted plaintext.
-`client_removal.json_plan` and `owned_json` retain strict restoration checks.
-An opaque value therefore still blocks detach and all-client removal preflight.
+`client_removal.json_plan` restores an opaque value only after this same proof
+passes for the receipt being removed; without it, or on a changed route, the
+value still blocks detach and all-client removal preflight. Left behind, a seal
+would make a later attach refuse, so a proven removal restores it.
 `desktop_windows.py` resolves the current user's registered Claude Store
 package and its virtualized roaming profile; the gateway profile stays separate.
 `windows_native.py` binds package, process, token and window APIs with explicit

@@ -50,7 +50,7 @@ def saved_values(entry, keys, legacy_keys=()):
         raise SystemExit('Assistant connection conflict: damaged_receipt.') from None
 
 
-def json_plan(home, client, entry):
+def json_plan(home, client, entry, receipts=None):
     """The same narrow proof serves standalone detach and all-client removal."""
     path = entry_path(entry)
     owner = _load('claude_config' if client == 'claude' else 'claude_desktop_config')
@@ -74,6 +74,17 @@ def json_plan(home, client, entry):
     if client == 'claude' and owner.FIRST_PARTY_KEY in previous:
         written = dict(written, **{owner.FIRST_PARTY_KEY: '1'})
     before = read(path)
+    if (client == 'claude-desktop' and receipts is not None and before is not None
+            and owner.sealed(seal := _json.document(before).get(owner.API_KEY_KEY))):
+        # Claude desktop seals the placeholder key at startup. Only the full
+        # operational proof (this install's route, receipt and profile) makes
+        # the seal ours to restore; left behind, it would refuse a reinstall.
+        state = _json.document(read(Path(home) / 'mixed-router-state.json') or '{}')
+        try:
+            owner.operational_snapshot(home, state, entry, receipts)
+        except ValueError as exc:  # the owner raises its own module's Conflict class
+            raise _json.Conflict(str(exc)) from None
+        written = dict(written, **{owner.API_KEY_KEY: seal})
     after = _json.restore(before if before is not None else '{}',
                           ('env',) if client == 'claude' else (), written, previous)
     files = [(path, before, after if before is not None else None)]
@@ -108,7 +119,7 @@ def detach_json(home, client, receipts, entry=None):
         return
     if entry is not None and entry != current:
         raise _json.Conflict('receipt_changed')
-    apply(json_plan(home, client, current))
+    apply(json_plan(home, client, current, receipts))
     receipts.drop_client(home, client, expected=current)
 
 
@@ -132,7 +143,7 @@ def preflight(home, receipts):
                 before, after = receipts.removal_plan(entry_path(entry), entry)
                 files = [(entry_path(entry), before, after)]
             else:
-                files = json_plan(home, client, entry)
+                files = json_plan(home, client, entry, receipts)
             targets = {path.resolve() for path, _, _ in files}
             if paths & targets:
                 raise _json.Conflict('ambiguous_settings_path')

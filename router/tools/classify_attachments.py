@@ -23,7 +23,7 @@ REASONS = frozenset(('damaged_receipt', 'marker_conflict', 'unsupported_structur
 
 
 def classify(home, python=None):
-    """Report routing ownership; opaque desktop fields can still refuse removal."""
+    """Report routing ownership; an unproven opaque desktop field still refuses removal."""
     owner, removal = _load('codex_config'), _load('client_removal')
     owner._owned.PYTHON = python
     home = Path(home)
@@ -52,7 +52,7 @@ def classify(home, python=None):
                 owner.removal_plan(removal.entry_path(entry), entry)
             else:
                 try:
-                    removal.json_plan(home, name, entry)
+                    removal.json_plan(home, name, entry, owner)
                 except removal._json.Conflict as exc:
                     if name != 'claude-desktop' or str(exc) != 'connection_changed':
                         raise

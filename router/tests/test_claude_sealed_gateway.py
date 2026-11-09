@@ -38,7 +38,7 @@ class SealedGatewayTests(unittest.TestCase):
         return {path: path.read_bytes() for path in (
             self.entry, self.receipt, self.config, self.rig.config, self.rig.settings)}
 
-    def test_startup_sealing_stays_operational_without_writes_or_restoration_grant(self):
+    def test_startup_sealing_stays_operational_without_writes(self):
         before = self.protected()
         for value in (sealed(), sealed(b'another opaque plaintext representation')):
             self.seal(value)
@@ -48,12 +48,31 @@ class SealedGatewayTests(unittest.TestCase):
             for hidden in (value, str(self.profile), self.rig.state['token']):
                 self.assertNotIn(hidden, json.dumps(result))
             self.assertEqual(self.protected(), before)
-            with self.assertRaisesRegex(SystemExit, 'connection_changed'):
-                self.owner.detach(self.rig.home, self.rig.owner)
-            with self.assertRaisesRegex(SystemExit, 'No assistants were detached'):
-                self.rig.remove()
-            self.assertEqual(self.protected(), before)
-            self.rig.backend.uninstall.assert_not_called()
+
+    def test_proven_sealed_removal_restores_the_entry_so_reattach_succeeds(self):
+        self.config.write_text('{ "keep": true }\n')  # never switched; mode policy is separate
+        self.seal(sealed(b'another opaque plaintext representation'))
+        self.assertEqual(self.rig.remove(), 0)
+        self.rig.backend.uninstall.assert_called_once()
+        doc = json.loads(self.entry.read_text())
+        for key in self.owner.OWNED_KEYS:
+            self.assertNotIn(key, doc)
+        self.assertEqual(doc['keep'], 'untouched')
+        self.assertEqual(json.loads(self.config.read_text()), {'keep': True})
+        self.assertEqual(self.owner.attach(self.rig.home, self.rig.state, self.rig.owner,
+                                           data_dir_override=self.profile), self.entry)
+
+    def test_sealed_removal_still_refuses_a_changed_route(self):
+        doc = json.loads(self.entry.read_text())
+        doc['inferenceGatewayBaseUrl'] += '-changed'
+        self.entry.write_text(json.dumps(doc))
+        before = self.protected()
+        with self.assertRaisesRegex(SystemExit, 'connection_changed'):
+            self.owner.detach(self.rig.home, self.rig.owner)
+        with self.assertRaisesRegex(SystemExit, 'No assistants were detached'):
+            self.rig.remove()
+        self.assertEqual(self.protected(), before)
+        self.rig.backend.uninstall.assert_not_called()
 
     def test_opaque_reattach_preserves_entry_receipt_and_subscription_selection_bytes(self):
         before = self.protected()

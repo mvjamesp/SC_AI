@@ -176,8 +176,17 @@ def restore_entry(path, previous):
     write_json(path, doc)
 
 
+def sealed(value, prefix='__sealed__:v1:'):
+    """True for a well-formed vendor seal; the opaque payload is never decoded further."""
+    payload = value[len(prefix):] if isinstance(value, str) and value.startswith(prefix) else ''
+    try:
+        return bool(payload) and base64.b64encode(base64.b64decode(payload, validate=True)).decode() == payload
+    except (binascii.Error, ValueError):
+        return False
+
+
 def operational_snapshot(home, state, entry, receipts):
-    """Prove routing only; an opaque vendor API value grants no restore authority."""
+    """Prove this install's route; a seal alone, without this proof, grants no restore authority."""
     conflict = _removal._json.Conflict
     receipt_path = receipts.receipt_path_for(home)
     raw = _removal.read(receipt_path)
@@ -216,16 +225,8 @@ def operational_snapshot(home, state, entry, receipts):
             or any(current.get(key) != desired_values(state)[key] for key in OWNED_KEYS[:-1])):
         raise conflict('connection_changed')
     value = current.get(API_KEY_KEY)
-    if value != API_KEY_VALUE:
-        if not isinstance(value, str) or not value.startswith('__sealed__:v1:'):
-            raise conflict('connection_changed')
-        payload = value[len('__sealed__:v1:'):]
-        try:
-            opaque = base64.b64decode(payload, validate=True)
-        except (binascii.Error, ValueError):
-            raise conflict('connection_changed') from None
-        if not opaque or base64.b64encode(opaque).decode('ascii') != payload:
-            raise conflict('connection_changed')
+    if value != API_KEY_VALUE and not sealed(value):
+        raise conflict('connection_changed')
     for target, before in {receipt_path: raw, **texts}.items():
         atomic_write.check_unchanged(target, before)
     return previous

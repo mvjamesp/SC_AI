@@ -9,6 +9,11 @@
   account state and never forward ChatGPT credentials to OpenRouter.
 - Keep the selected OpenRouter-only action harmless on installs without a
   ChatGPT subscription.
+- Let removal detach Claude desktop after Claude seals its saved gateway
+  placeholder, once the same route, receipt and profile checks used for
+  updates all pass. A changed route still refuses before anything changes.
+- Reinstall after removal instead of reporting the removed release as up to
+  date and stopping at "could not verify the current router".
 
 ## 1.3.40
 
